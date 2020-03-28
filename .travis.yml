@@ -1,0 +1,30 @@
+language: go
+
+go:
+  - 1.x
+
+git:
+  depth: 1
+
+services:
+  - postgresql
+
+env:
+  global:
+    - GO111MODULE=on
+    - GOPROXY=https://proxy.golang.org
+    - GOFLAGS=-mod=readonly
+    - PGUSER=postgres
+
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+
+before_script:
+  - createdb travis_ci_test
+
+install: go mod download
+
+script:
+  - TEST_DATABASE=travis_ci_test go test -v -race
