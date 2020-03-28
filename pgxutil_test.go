@@ -440,3 +440,52 @@ func TestInsert(t *testing.T) {
 		assert.Equal(t, returningRow, selectedRow)
 	})
 }
+
+func TestUpdateWithoutWhere(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
+		require.NoError(t, err)
+		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		require.NoError(t, err)
+		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Bill", "height": 68})
+		require.NoError(t, err)
+
+		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]interface{}{"height": 99}, nil)
+		require.NoError(t, err)
+		assert.EqualValues(t, 2, updateCount)
+
+		ids := []int32{row1["id"].(int32), row2["id"].(int32)}
+		for i, id := range ids {
+			selectedRow, err := pgxutil.SelectMap(ctx, tx, "select * from t where id=$1", id)
+			require.NoErrorf(t, err, "%d", i)
+			assert.Equalf(t, int32(99), selectedRow["height"], "%d", i)
+		}
+	})
+}
+
+func TestUpdateWithWhere(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
+		require.NoError(t, err)
+		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		require.NoError(t, err)
+		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Bill", "height": 68})
+		require.NoError(t, err)
+
+		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]interface{}{"height": 99}, map[string]interface{}{"id": row1["id"]})
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), updateCount)
+
+		freshRow1, err := pgxutil.SelectMap(ctx, tx, "select * from t where id=$1", row1["id"])
+		require.NoError(t, err)
+		assert.Equal(t, row1["id"], freshRow1["id"])
+		assert.Equal(t, row1["name"], freshRow1["name"])
+		assert.Equal(t, int32(99), freshRow1["height"])
+
+		freshRow2, err := pgxutil.SelectMap(ctx, tx, "select * from t where id=$1", row2["id"])
+		require.NoError(t, err)
+		assert.Equal(t, row2, freshRow2)
+	})
+}

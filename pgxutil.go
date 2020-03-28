@@ -3,8 +3,10 @@ package pgxutil
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/gofrs/uuid"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgsql"
 	"github.com/jackc/pgtype"
 	gofrs "github.com/jackc/pgtype/ext/gofrs-uuid"
@@ -20,6 +22,10 @@ var errMultipleRows = errors.New("multiple rows in result set")
 
 type Queryer interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+}
+
+type Execer interface {
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
 func selectOneValueNotNull(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
@@ -460,4 +466,17 @@ func Insert(ctx context.Context, db Queryer, tableName string, values map[string
 	stmt := pgsql.Insert(tableName).Data(pgsql.RowMap(values)).Returning("*")
 	sql, args := pgsql.Build(stmt)
 	return SelectMap(ctx, db, sql, args...)
+}
+
+// Update executes an update statement and returns the number of rows updated.
+func Update(ctx context.Context, db Execer, tableName string, setValues, whereArgs map[string]interface{}) (int64, error) {
+	stmt := pgsql.Update(tableName).Set(pgsql.RowMap(setValues))
+	if whereArgs != nil {
+		for k, v := range whereArgs {
+			stmt.Where(fmt.Sprintf("%s = ?", k), v)
+		}
+	}
+	sql, args := pgsql.Build(stmt)
+	ct, err := db.Exec(ctx, sql, args...)
+	return ct.RowsAffected(), err
 }
