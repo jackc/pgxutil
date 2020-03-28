@@ -11,72 +11,85 @@ import (
 
 var errNullValue = errors.New("value is null")
 var errNotFound = errors.New("no rows in result set")
-var errMultipleRows = errors.New("more than one row found")
+var errNoColumns = errors.New("no columns in result set")
+var errMultipleColumns = errors.New("multiple columns in result set")
+var errMultipleRows = errors.New("multiple rows in result set")
 
 type Queryer interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 }
 
-// SelectString selects a single string. Any PostgreSQL data type can be selected. The text format of the
-// selected values will be returned. An error will be returned if no rows are found or a null value is found.
-func SelectString(ctx context.Context, db Queryer, sql string, args ...interface{}) (string, error) {
-	var v pgtype.GenericText
-	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+func selectOne(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
 	rows, _ := db.Query(ctx, sql, args...)
 
 	rowCount := 0
 	for rows.Next() {
-		rows.Scan(&v)
+		if len(rows.RawValues()) == 0 {
+			rows.Close()
+			return errNoColumns
+		}
+		if len(rows.RawValues()) > 1 {
+			rows.Close()
+			return errMultipleColumns
+		}
+		if rows.RawValues()[0] == nil {
+			rows.Close()
+			return errNullValue
+		}
+
+		err := rowFn(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
 		rowCount += 1
 	}
 
 	if rows.Err() != nil {
-		return "", rows.Err()
+		return rows.Err()
 	}
 
 	if rowCount == 0 {
-		return "", errNotFound
+		return errNotFound
 	}
 	if rowCount > 1 {
-		return "", errMultipleRows
+		return errMultipleRows
 	}
 
-	if v.Status == pgtype.Null {
-		return "", errNullValue
+	return nil
+
+}
+
+// SelectString selects a single string. Any PostgreSQL data type can be selected. The text format of the
+// selected values will be returned. An error will be returned if no rows are found or a null value is found.
+func SelectString(ctx context.Context, db Queryer, sql string, args ...interface{}) (string, error) {
+	var v string
+	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		v = string(rows.RawValues()[0])
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
 
-	return v.String, nil
+	return v, nil
 }
 
 // SelectByteSlice selects a single byte slice. Any PostgreSQL data type can be selected. The binary format of the
 // selected value will be returned.An error will be returned if no rows are found or a null value is found.
 func SelectByteSlice(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]byte, error) {
-	var v pgtype.GenericBinary
+	var v []byte
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.BinaryFormatCode}}, args...)
-	rows, _ := db.Query(ctx, sql, args...)
-
-	rowCount := 0
-	for rows.Next() {
-		rows.Scan(&v)
-		rowCount += 1
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		v = rows.RawValues()[0]
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
-
-	if rowCount == 0 {
-		return nil, errNotFound
-	}
-	if rowCount > 1 {
-		return nil, errMultipleRows
-	}
-
-	if v.Status == pgtype.Null {
-		return nil, errNullValue
-	}
-
-	return v.Bytes, nil
+	return v, nil
 }
 
 // SelectInt64 selects a single int64. Any PostgreSQL value representable as an int64 can be selected. An error will be
@@ -84,27 +97,11 @@ func SelectByteSlice(ctx context.Context, db Queryer, sql string, args ...interf
 func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{}) (int64, error) {
 	var v pgtype.Int8
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	rows, _ := db.Query(ctx, sql, args...)
-
-	rowCount := 0
-	for rows.Next() {
-		rows.Scan(&v)
-		rowCount += 1
-	}
-
-	if rows.Err() != nil {
-		return 0, rows.Err()
-	}
-
-	if rowCount == 0 {
-		return 0, errNotFound
-	}
-	if rowCount > 1 {
-		return 0, errMultipleRows
-	}
-
-	if v.Status == pgtype.Null {
-		return 0, errNullValue
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		return rows.Scan(&v)
+	})
+	if err != nil {
+		return 0, err
 	}
 
 	return v.Int, nil
@@ -116,27 +113,11 @@ func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{
 func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interface{}) (float64, error) {
 	var v pgtype.Float8
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	rows, _ := db.Query(ctx, sql, args...)
-
-	rowCount := 0
-	for rows.Next() {
-		rows.Scan(&v)
-		rowCount += 1
-	}
-
-	if rows.Err() != nil {
-		return 0, rows.Err()
-	}
-
-	if rowCount == 0 {
-		return 0, errNotFound
-	}
-	if rowCount > 1 {
-		return 0, errMultipleRows
-	}
-
-	if v.Status == pgtype.Null {
-		return 0, errNullValue
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		return rows.Scan(&v)
+	})
+	if err != nil {
+		return 0, err
 	}
 
 	return v.Float, nil
@@ -147,27 +128,11 @@ func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interfac
 func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interface{}) (decimal.Decimal, error) {
 	var v pgtype.GenericText
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	rows, _ := db.Query(ctx, sql, args...)
-
-	rowCount := 0
-	for rows.Next() {
-		rows.Scan(&v)
-		rowCount += 1
-	}
-
-	if rows.Err() != nil {
-		return decimal.Decimal{}, rows.Err()
-	}
-
-	if rowCount == 0 {
-		return decimal.Decimal{}, errNotFound
-	}
-	if rowCount > 1 {
-		return decimal.Decimal{}, errMultipleRows
-	}
-
-	if v.Status == pgtype.Null {
-		return decimal.Decimal{}, errNullValue
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		return rows.Scan(&v)
+	})
+	if err != nil {
+		return decimal.Decimal{}, err
 	}
 
 	d, err := decimal.NewFromString(v.String)
@@ -181,37 +146,17 @@ func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interfac
 // SelectValue selects a single value of unspecified type. An error will be returned if no rows are found or a null
 // value is found.
 func SelectValue(ctx context.Context, db Queryer, sql string, args ...interface{}) (interface{}, error) {
-	rows, _ := db.Query(ctx, sql, args...)
-
-	// TODO - check that one column is returned
-	// This may require changes to pgx or pgconn
-	// This check is required here because of using Values instead of Scan -- but it could be used in the other Select*
-	// functions to give better error messages.
-
 	var v interface{}
-	rowCount := 0
-	for rows.Next() {
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values, err := rows.Values()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		v = values[0]
-		rowCount += 1
-	}
-
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
-
-	if rowCount == 0 {
-		return nil, errNotFound
-	}
-	if rowCount > 1 {
-		return nil, errMultipleRows
-	}
-
-	if v == nil {
-		return nil, errNullValue
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return v, nil
