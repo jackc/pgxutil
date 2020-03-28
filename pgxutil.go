@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/gofrs/uuid"
+	"github.com/jackc/pgsql"
 	"github.com/jackc/pgtype"
 	gofrs "github.com/jackc/pgtype/ext/gofrs-uuid"
 	"github.com/jackc/pgx/v4"
@@ -452,4 +453,11 @@ func SelectStringMapColumn(ctx context.Context, db Queryer, sql string, args ...
 	}
 
 	return v, nil
+}
+
+// Insert inserts a row and returns the resulting row.
+func Insert(ctx context.Context, db Queryer, tableName string, values map[string]interface{}) (map[string]interface{}, error) {
+	stmt := pgsql.Insert(tableName).Data(pgsql.RowMap(values)).Returning("*")
+	sql, args := pgsql.Build(stmt)
+	return SelectMap(ctx, db, sql, args...)
 }

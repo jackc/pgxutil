@@ -422,3 +422,21 @@ func TestSelectStringMapColumn(t *testing.T) {
 		}
 	})
 }
+
+func TestInsert(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
+		require.NoError(t, err)
+		returningRow, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), returningRow["id"])
+		assert.Equal(t, "Adam", returningRow["name"])
+		assert.Equal(t, int32(72), returningRow["height"])
+
+		selectedRow, err := pgxutil.SelectMap(ctx, tx, "select * from t where id=$1", returningRow["id"])
+		require.NoError(t, err)
+		assert.Equal(t, returningRow, selectedRow)
+	})
+}
