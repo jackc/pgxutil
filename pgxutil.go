@@ -21,11 +21,8 @@ type Queryer interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 }
 
-func selectOne(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
-	rows, _ := db.Query(ctx, sql, args...)
-
-	rowCount := 0
-	for rows.Next() {
+func selectOneValue(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+	return selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
 		if len(rows.RawValues()) == 0 {
 			rows.Close()
 			return errNoColumns
@@ -39,16 +36,18 @@ func selectOne(ctx context.Context, db Queryer, sql string, args []interface{}, 
 			return errNullValue
 		}
 
-		err := rowFn(rows)
-		if err != nil {
-			rows.Close()
-			return err
-		}
-		rowCount += 1
-	}
+		return rowFn(rows)
+	})
+}
 
-	if rows.Err() != nil {
-		return rows.Err()
+func selectOneRow(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+	rowCount := 0
+	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
+		rowCount += 1
+		return rowFn(rows)
+	})
+	if err != nil {
+		return err
 	}
 
 	if rowCount == 0 {
@@ -59,7 +58,24 @@ func selectOne(ctx context.Context, db Queryer, sql string, args []interface{}, 
 	}
 
 	return nil
+}
 
+func selectRows(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+	rows, _ := db.Query(ctx, sql, args...)
+
+	for rows.Next() {
+		err := rowFn(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+	}
+
+	if rows.Err() != nil {
+		return rows.Err()
+	}
+
+	return nil
 }
 
 // SelectString selects a single string. Any PostgreSQL data type can be selected. The text format of the
@@ -67,7 +83,7 @@ func selectOne(ctx context.Context, db Queryer, sql string, args []interface{}, 
 func SelectString(ctx context.Context, db Queryer, sql string, args ...interface{}) (string, error) {
 	var v string
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		v = string(rows.RawValues()[0])
 		return nil
 	})
@@ -83,7 +99,7 @@ func SelectString(ctx context.Context, db Queryer, sql string, args ...interface
 func SelectByteSlice(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]byte, error) {
 	var v []byte
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.BinaryFormatCode}}, args...)
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		v = rows.RawValues()[0]
 		return nil
 	})
@@ -99,7 +115,7 @@ func SelectByteSlice(ctx context.Context, db Queryer, sql string, args ...interf
 func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{}) (int64, error) {
 	var v pgtype.Int8
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
 	})
 	if err != nil {
@@ -115,7 +131,7 @@ func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{
 func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interface{}) (float64, error) {
 	var v pgtype.Float8
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
 	})
 	if err != nil {
@@ -130,7 +146,7 @@ func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interfac
 func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interface{}) (decimal.Decimal, error) {
 	var v pgtype.GenericText
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
 	})
 	if err != nil {
@@ -148,7 +164,7 @@ func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interfac
 // SelectUUID selects a single uuid.UUID. An error will be returned if no rows are found or a null value is found.
 func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}) (uuid.UUID, error) {
 	var v gofrs.UUID
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
 	})
 	if err != nil {
@@ -162,13 +178,56 @@ func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}
 // value is found.
 func SelectValue(ctx context.Context, db Queryer, sql string, args ...interface{}) (interface{}, error) {
 	var v interface{}
-	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+	err := selectOneValue(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values, err := rows.Values()
 		if err != nil {
 			return err
 		}
 		v = values[0]
 		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// SelectMap selects a single row into a map. An error will be returned if no rows are found.
+func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{}) (map[string]interface{}, error) {
+	var v map[string]interface{}
+	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
+		values, err := rows.Values()
+		if err != nil {
+			return err
+		}
+
+		v = make(map[string]interface{}, len(values))
+		for i := range values {
+			v[string(rows.FieldDescriptions()[i].Name)] = values[i]
+		}
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// SelectStringMap selects a single row into a map where all values are strings. An error will be returned if no rows
+//are found.
+func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...interface{}) (map[string]string, error) {
+	var v map[string]string
+	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
+		values := rows.RawValues()
+		v = make(map[string]string, len(values))
+		for i := range values {
+			v[string(rows.FieldDescriptions()[i].Name)] = string(values[i])
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -204,3 +204,37 @@ func TestSelectValue(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectMap(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			result map[string]interface{}
+		}{
+			{"select 'Adam' as name, 72 as height", map[string]interface{}{"name": "Adam", "height": int32(72)}},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectMap(ctx, tx, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func TestSelectStringMap(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			result map[string]string
+		}{
+			{"select 'Adam' as name, 72 as height", map[string]string{"name": "Adam", "height": "72"}},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectStringMap(ctx, tx, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}
