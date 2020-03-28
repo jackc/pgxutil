@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
+	"github.com/shopspring/decimal"
 )
 
 var errNullValue = errors.New("value is null")
@@ -139,4 +140,40 @@ func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interfac
 	}
 
 	return v.Float, nil
+}
+
+// SelectDecimal selects a single decimal.Decimal. Any PostgreSQL value representable as an decimal can be selected.
+// An error will be returned if no rows are found or a null value is found.
+func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interface{}) (decimal.Decimal, error) {
+	var v pgtype.GenericText
+	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	rows, _ := db.Query(ctx, sql, args...)
+
+	rowCount := 0
+	for rows.Next() {
+		rows.Scan(&v)
+		rowCount += 1
+	}
+
+	if rows.Err() != nil {
+		return decimal.Decimal{}, rows.Err()
+	}
+
+	if rowCount == 0 {
+		return decimal.Decimal{}, errNotFound
+	}
+	if rowCount > 1 {
+		return decimal.Decimal{}, errMultipleRows
+	}
+
+	if v.Status == pgtype.Null {
+		return decimal.Decimal{}, errNullValue
+	}
+
+	d, err := decimal.NewFromString(v.String)
+	if err != nil {
+		return decimal.Decimal{}, err
+	}
+
+	return d, nil
 }

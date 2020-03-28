@@ -148,3 +148,31 @@ func TestSelectFloat64(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectDecimal(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			err    string
+			result string
+		}{
+			{"select 1.2345::numeric", "", "1.2345"},
+			{"select 1.2345::float8", "", "1.2345"},
+			{"select 1.23::float4", "", "1.23"},
+			{"select 99999999999::bigint", "", "99999999999"},
+			{"select 42::smallint", "", "42"},
+			{"select null::float8", "value is null", "0"},
+			{"select 42::float8 where 1=0", "no rows in result set", "0"},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectDecimal(ctx, tx, tt.sql)
+			if tt.err == "" {
+				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			} else {
+				assert.EqualErrorf(t, err, tt.err, "%d. %s", i, tt.sql)
+			}
+			assert.Equalf(t, tt.result, v.String(), "%d. %s", i, tt.sql)
+		}
+	})
+}
