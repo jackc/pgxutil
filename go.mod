@@ -3,6 +3,7 @@ module github.com/jackc/pgxutil
 go 1.14
 
 require (
+	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/jackc/pgconn v1.4.0
 	github.com/jackc/pgtype v1.2.0
 	github.com/jackc/pgx v3.6.2+incompatible

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gofrs/uuid"
 	"github.com/jackc/pgtype"
+	gofrs "github.com/jackc/pgtype/ext/gofrs-uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/shopspring/decimal"
 )
@@ -141,6 +143,19 @@ func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interfac
 	}
 
 	return d, nil
+}
+
+// SelectUUID selects a single uuid.UUID. An error will be returned if no rows are found or a null value is found.
+func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}) (uuid.UUID, error) {
+	var v gofrs.UUID
+	err := selectOne(ctx, db, sql, args, func(rows pgx.Rows) error {
+		return rows.Scan(&v)
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return v.UUID, nil
 }
 
 // SelectValue selects a single value of unspecified type. An error will be returned if no rows are found or a null

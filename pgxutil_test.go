@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgxutil"
@@ -164,6 +165,23 @@ func TestSelectDecimal(t *testing.T) {
 			v, err := pgxutil.SelectDecimal(ctx, tx, tt.sql)
 			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			assert.Equalf(t, tt.result, v.String(), "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func TestSelectUUID(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			result uuid.UUID
+		}{
+			{"select '27fd10c1-bccc-4efd-9fea-093f86c95089'::uuid", uuid.FromStringOrNil("27fd10c1-bccc-4efd-9fea-093f86c95089")},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectUUID(ctx, tx, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
 		}
 	})
 }
