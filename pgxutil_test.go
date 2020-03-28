@@ -176,3 +176,29 @@ func TestSelectDecimal(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectValue(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			err    string
+			result interface{}
+		}{
+			{"select 'Hello'", "", "Hello"},
+			{"select 42", "", int32(42)},
+			{"select 1.23::float4", "", float32(1.23)},
+			{"select null::float8", "value is null", nil},
+			{"select 42::float8 where 1=0", "no rows in result set", nil},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectValue(ctx, tx, tt.sql)
+			if tt.err == "" {
+				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			} else {
+				assert.EqualErrorf(t, err, tt.err, "%d. %s", i, tt.sql)
+			}
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}

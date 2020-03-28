@@ -177,3 +177,42 @@ func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interfac
 
 	return d, nil
 }
+
+// SelectValue selects a single value of unspecified type. An error will be returned if no rows are found or a null
+// value is found.
+func SelectValue(ctx context.Context, db Queryer, sql string, args ...interface{}) (interface{}, error) {
+	rows, _ := db.Query(ctx, sql, args...)
+
+	// TODO - check that one column is returned
+	// This may require changes to pgx or pgconn
+	// This check is required here because of using Values instead of Scan -- but it could be used in the other Select*
+	// functions to give better error messages.
+
+	var v interface{}
+	rowCount := 0
+	for rows.Next() {
+		values, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+		v = values[0]
+		rowCount += 1
+	}
+
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	if rowCount == 0 {
+		return nil, errNotFound
+	}
+	if rowCount > 1 {
+		return nil, errMultipleRows
+	}
+
+	if v == nil {
+		return nil, errNullValue
+	}
+
+	return v, nil
+}
