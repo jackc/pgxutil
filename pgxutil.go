@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgconn"
@@ -459,6 +460,45 @@ func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...int
 	}
 
 	return v, nil
+}
+
+// SelectStruct selects a single row into struct dst. An error will be returned if no rows are found. The values are
+// assigned positionally to the exported struct fields.
+func SelectStruct(ctx context.Context, db Queryer, dst interface{}, sql string, args ...interface{}) error {
+	dstValue := reflect.ValueOf(dst)
+	if dstValue.Kind() != reflect.Ptr {
+		return fmt.Errorf("dst not a pointer")
+	}
+
+	dstElemValue := dstValue.Elem()
+	dstElemType := dstElemValue.Type()
+
+	exportedFields := make([]int, 0, dstElemType.NumField())
+	for i := 0; i < dstElemType.NumField(); i++ {
+		sf := dstElemType.Field(i)
+		if sf.PkgPath == "" {
+			exportedFields = append(exportedFields, i)
+		}
+	}
+
+	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
+		rowFieldCount := len(rows.RawValues())
+		if rowFieldCount > len(exportedFields) {
+			return fmt.Errorf("got %d values, but dst struct has only %d fields", rowFieldCount, len(exportedFields))
+		}
+
+		scanTargets := make([]interface{}, rowFieldCount)
+		for i := 0; i < rowFieldCount; i++ {
+			scanTargets[i] = dstElemValue.Field(exportedFields[i]).Addr().Interface()
+		}
+
+		return rows.Scan(scanTargets...)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Insert inserts a row and returns the resulting row.

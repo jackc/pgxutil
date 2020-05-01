@@ -423,6 +423,92 @@ func TestSelectAllStringMap(t *testing.T) {
 	})
 }
 
+func TestSelectStructPositionalMapping(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		type person struct {
+			Name   string
+			Height int32
+		}
+
+		tests := []struct {
+			sql      string
+			expected person
+		}{
+			{"select 'Adam', 72", person{Name: "Adam", Height: 72}},
+		}
+		for i, tt := range tests {
+			var actual person
+			err := pgxutil.SelectStruct(ctx, tx, &actual, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.expected, actual, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func BenchmarkSelectRow(b *testing.B) {
+	ctx := context.Background()
+	conn := connectPG(b, ctx)
+	defer closeConn(b, conn)
+
+	type person struct {
+		FirstName string
+		LastName  string
+		Height    int32
+	}
+
+	sql := "select 'Adam' as first_name, 'Smith' as last_name, 72 as height"
+
+	validateStruct := func(b *testing.B, dst *person, err error) {
+		if err != nil {
+			b.Fatal(err)
+		}
+		if dst.FirstName != "Adam" {
+			b.Fatal("unexpected value read")
+		}
+		if dst.LastName != "Smith" {
+			b.Fatal("unexpected value read")
+		}
+		if dst.Height != 72 {
+			b.Fatal("unexpected value read")
+		}
+	}
+
+	b.Run("Scan", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var dst person
+			err := conn.QueryRow(ctx, sql).Scan(&dst.FirstName, &dst.LastName, &dst.Height)
+			validateStruct(b, &dst, err)
+		}
+	})
+
+	b.Run("SelectMap", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			dst, err := pgxutil.SelectMap(ctx, conn, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if dst["first_name"] != "Adam" {
+				b.Fatal("unexpected value read")
+			}
+			if dst["last_name"] != "Smith" {
+				b.Fatal("unexpected value read")
+			}
+			if dst["height"] != int32(72) {
+				b.Fatal("unexpected value read")
+			}
+		}
+	})
+
+	b.Run("SelectStruct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var dst person
+			err := pgxutil.SelectStruct(ctx, conn, &dst, sql)
+			validateStruct(b, &dst, err)
+		}
+	})
+}
+
 func TestInsert(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
