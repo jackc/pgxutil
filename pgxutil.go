@@ -134,9 +134,9 @@ func SelectString(ctx context.Context, db Queryer, sql string, args ...interface
 	return v, nil
 }
 
-// SelectStringColumn selects a column of strings. Any PostgreSQL data type can be selected. The text format of the
+// SelectAllString selects a column of strings. Any PostgreSQL data type can be selected. The text format of the
 // selected values will be returned. An error will be returned a null value is found.
-func SelectStringColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]string, error) {
+func SelectAllString(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]string, error) {
 	var v []string
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -166,9 +166,9 @@ func SelectByteSlice(ctx context.Context, db Queryer, sql string, args ...interf
 	return v, nil
 }
 
-// SelectByteSliceColumn selects a column byte slice. Any PostgreSQL data type can be selected. The binary format of the
+// SelectAllByteSlice selects a column byte slice. Any PostgreSQL data type can be selected. The binary format of the
 // selected value will be returned. An error will be returned if a null value is found.
-func SelectByteSliceColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([][]byte, error) {
+func SelectAllByteSlice(ctx context.Context, db Queryer, sql string, args ...interface{}) ([][]byte, error) {
 	var v [][]byte
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.BinaryFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -197,9 +197,9 @@ func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{
 	return v.Int, nil
 }
 
-// SelectInt64Column selects a column of int64. Any PostgreSQL value representable as an int64 can be selected. An error
+// SelectAllInt64 selects a column of int64. Any PostgreSQL value representable as an int64 can be selected. An error
 // will be returned if null value is found.
-func SelectInt64Column(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]int64, error) {
+func SelectAllInt64(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]int64, error) {
 	var v []int64
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -234,10 +234,10 @@ func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interfac
 	return v.Float, nil
 }
 
-// SelectFloat64Column selects a single float64. Any PostgreSQL value representable as an float64 can be selected. However,
+// SelectAllFloat64 selects a single float64. Any PostgreSQL value representable as an float64 can be selected. However,
 // precision is not guaranteed when converting formats (e.g. when selecting a numeric with more precision than a float
 // can represent). An error will be returned if no rows are found or a null value is found.
-func SelectFloat64Column(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]float64, error) {
+func SelectAllFloat64(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]float64, error) {
 	var v []float64
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -276,9 +276,9 @@ func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interfac
 	return d, nil
 }
 
-// SelectDecimalColumn selects a column of decimal.Decimal. Any PostgreSQL value representable as an decimal can be
+// SelectAllDecimal selects a column of decimal.Decimal. Any PostgreSQL value representable as an decimal can be
 // selected. An error will be returned if a null value is found.
-func SelectDecimalColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]decimal.Decimal, error) {
+func SelectAllDecimal(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]decimal.Decimal, error) {
 	var v []decimal.Decimal
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -317,7 +317,7 @@ func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}
 }
 
 // SelectUUID selects a column of uuid.UUID. An error will be returned if a null value is found.
-func SelectUUIDColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]uuid.UUID, error) {
+func SelectAllUUID(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]uuid.UUID, error) {
 	var v []uuid.UUID
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
 		var u gofrs.UUID
@@ -353,8 +353,8 @@ func SelectValue(ctx context.Context, db Queryer, sql string, args ...interface{
 	return v, nil
 }
 
-// SelectValueColumn selects a column of unspecified type.
-func SelectValueColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]interface{}, error) {
+// SelectAllValue selects a column of unspecified type.
+func SelectAllValue(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]interface{}, error) {
 	var v []interface{}
 	err := selectColumn(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values, err := rows.Values()
@@ -394,8 +394,8 @@ func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{})
 	return v, nil
 }
 
-// SelectMapColumn selects rows into a map slice.
-func SelectMapColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]interface{}, error) {
+// SelectAllMap selects rows into a map slice.
+func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]interface{}, error) {
 	var v []map[string]interface{}
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values, err := rows.Values()
@@ -439,8 +439,8 @@ func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...interf
 	return v, nil
 }
 
-// SelectStringMapColumn selects rows into a map slice where all values are strings.
-func SelectStringMapColumn(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]string, error) {
+// SelectAllStringMap selects rows into a map slice where all values are strings.
+func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]string, error) {
 	var v []map[string]string
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
