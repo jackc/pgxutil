@@ -501,6 +501,86 @@ func SelectStruct(ctx context.Context, db Queryer, dst interface{}, sql string, 
 	return nil
 }
 
+// SelectAllStruct selects rows into dst. dst must be a slice of struct or pointer to struct. The values are assigned
+// positionally to the exported struct fields.
+func SelectAllStruct(ctx context.Context, db Queryer, dst interface{}, sql string, args ...interface{}) error {
+	ptrSliceValue := reflect.ValueOf(dst)
+	if ptrSliceValue.Kind() != reflect.Ptr {
+		return fmt.Errorf("dst not a pointer")
+	}
+
+	sliceType := ptrSliceValue.Elem().Type()
+	if sliceType.Kind() != reflect.Slice {
+		return fmt.Errorf("dst not a pointer to slice")
+	}
+
+	var isPtr bool
+	sliceElemType := sliceType.Elem()
+	var structType reflect.Type
+	switch sliceElemType.Kind() {
+	case reflect.Ptr:
+		isPtr = true
+		structType = sliceElemType.Elem()
+	case reflect.Struct:
+		structType = sliceElemType
+	default:
+		return fmt.Errorf("dst not a pointer to slice of struct or pointer to struct")
+	}
+
+	if structType.Kind() != reflect.Struct {
+		return fmt.Errorf("dst not a pointer to slice of struct or pointer to struct")
+	}
+
+	exportedFields := make([]int, 0, structType.NumField())
+	for i := 0; i < structType.NumField(); i++ {
+		sf := structType.Field(i)
+		if sf.PkgPath == "" {
+			exportedFields = append(exportedFields, i)
+		}
+	}
+
+	sliceValue := reflect.New(sliceType).Elem()
+
+	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
+		rowFieldCount := len(rows.RawValues())
+		if rowFieldCount > len(exportedFields) {
+			return fmt.Errorf("got %d values, but dst struct has only %d fields", rowFieldCount, len(exportedFields))
+		}
+
+		var appendableValue reflect.Value
+		var fieldableValue reflect.Value
+
+		if isPtr {
+			appendableValue = reflect.New(structType)
+			fieldableValue = appendableValue.Elem()
+		} else {
+			appendableValue = reflect.New(structType).Elem()
+			fieldableValue = appendableValue
+		}
+
+		scanTargets := make([]interface{}, rowFieldCount)
+		for i := 0; i < rowFieldCount; i++ {
+			scanTargets[i] = fieldableValue.Field(exportedFields[i]).Addr().Interface()
+		}
+
+		err := rows.Scan(scanTargets...)
+		if err != nil {
+			return err
+		}
+
+		sliceValue = reflect.Append(sliceValue, appendableValue)
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	ptrSliceValue.Elem().Set(sliceValue)
+
+	return nil
+}
+
 // Insert inserts a row and returns the resulting row.
 func Insert(ctx context.Context, db Queryer, tableName string, values map[string]interface{}) (map[string]interface{}, error) {
 	stmt := pgsql.Insert(tableName).Data(pgsql.RowMap(values)).Returning("*")

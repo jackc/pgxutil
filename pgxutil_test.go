@@ -446,6 +446,58 @@ func TestSelectStructPositionalMapping(t *testing.T) {
 	})
 }
 
+func TestSelectAllStructPointerPositionalMapping(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		type person struct {
+			Name   string
+			Height int32
+		}
+
+		tests := []struct {
+			sql      string
+			expected []*person
+		}{
+			{"select 'Adam', 72 union all select 'Bill', 65", []*person{
+				{Name: "Adam", Height: 72},
+				{Name: "Bill", Height: 65},
+			}},
+		}
+		for i, tt := range tests {
+			var actual []*person
+			err := pgxutil.SelectAllStruct(ctx, tx, &actual, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.expected, actual, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func TestSelectAllStructPositionalMapping(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		type person struct {
+			Name   string
+			Height int32
+		}
+
+		tests := []struct {
+			sql      string
+			expected []person
+		}{
+			{"select 'Adam', 72 union all select 'Bill', 65", []person{
+				{Name: "Adam", Height: 72},
+				{Name: "Bill", Height: 65},
+			}},
+		}
+		for i, tt := range tests {
+			var actual []person
+			err := pgxutil.SelectAllStruct(ctx, tx, &actual, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.expected, actual, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
 func BenchmarkSelectRow(b *testing.B) {
 	ctx := context.Background()
 	conn := connectPG(b, ctx)
@@ -505,6 +557,155 @@ func BenchmarkSelectRow(b *testing.B) {
 			var dst person
 			err := pgxutil.SelectStruct(ctx, conn, &dst, sql)
 			validateStruct(b, &dst, err)
+		}
+	})
+}
+
+func BenchmarkSelectAllRows(b *testing.B) {
+	ctx := context.Background()
+	conn := connectPG(b, ctx)
+	defer closeConn(b, conn)
+
+	type person struct {
+		FirstName string
+		LastName  string
+		Height    int32
+	}
+
+	sql := "select 'Adam' as first_name, 'Smith' as last_name, 72 as height from generate_series(1, 10)"
+
+	validateStruct := func(b *testing.B, dst *person) {
+		if dst.FirstName != "Adam" {
+			b.Fatal("unexpected value read")
+		}
+		if dst.LastName != "Smith" {
+			b.Fatal("unexpected value read")
+		}
+		if dst.Height != 72 {
+			b.Fatal("unexpected value read")
+		}
+	}
+
+	b.Run("Scan Streaming", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var p person
+			rows, err := conn.Query(ctx, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for rows.Next() {
+				err = rows.Scan(&p.FirstName, &p.LastName, &p.Height)
+				if err != nil {
+					b.Fatal(err)
+				}
+				validateStruct(b, &p)
+			}
+		}
+	})
+
+	b.Run("Scan Collect Pointer to Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var people []*person
+			rows, err := conn.Query(ctx, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for rows.Next() {
+				var p person
+				err = rows.Scan(&p.FirstName, &p.LastName, &p.Height)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				people = append(people, &p)
+			}
+
+			if rows.Err() != nil {
+				b.Fatal(rows.Err())
+			}
+
+			for _, p := range people {
+				validateStruct(b, p)
+			}
+		}
+	})
+
+	b.Run("Scan Collect Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var people []person
+			rows, err := conn.Query(ctx, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for rows.Next() {
+				var p person
+				err = rows.Scan(&p.FirstName, &p.LastName, &p.Height)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				people = append(people, p)
+			}
+
+			if rows.Err() != nil {
+				b.Fatal(rows.Err())
+			}
+
+			for i := range people {
+				validateStruct(b, &people[i])
+			}
+		}
+	})
+
+	b.Run("SelectAllMap", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			people, err := pgxutil.SelectAllMap(ctx, conn, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, p := range people {
+				if p["first_name"] != "Adam" {
+					b.Fatal("unexpected value read")
+				}
+				if p["last_name"] != "Smith" {
+					b.Fatal("unexpected value read")
+				}
+				if p["height"] != int32(72) {
+					b.Fatal("unexpected value read")
+				}
+			}
+		}
+	})
+
+	b.Run("SelectAllStruct Pointer to Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var people []*person
+			err := pgxutil.SelectAllStruct(ctx, conn, &people, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, p := range people {
+				validateStruct(b, p)
+			}
+		}
+	})
+
+	b.Run("SelectAllStruct Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var people []person
+			err := pgxutil.SelectAllStruct(ctx, conn, &people, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for i := range people {
+				validateStruct(b, &people[i])
+			}
 		}
 	})
 }
