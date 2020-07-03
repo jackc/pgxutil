@@ -183,6 +183,39 @@ func SelectAllByteSlice(ctx context.Context, db Queryer, sql string, args ...int
 	return v, nil
 }
 
+// SelectBool selects a single bool. An error will be returned if no rows are found or a null value is found.
+func SelectBool(ctx context.Context, db Queryer, sql string, args ...interface{}) (bool, error) {
+	var v pgtype.Bool
+	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	err := selectOneValueNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
+		return rows.Scan(&v)
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return v.Bool, nil
+}
+
+// SelectAllBool selects a column of bool. An error will be returned if null value is found.
+func SelectAllBool(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]bool, error) {
+	var v []bool
+	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
+		var b pgtype.Bool
+		err := rows.Scan(&b)
+		if err != nil {
+			return err
+		}
+		v = append(v, b.Bool)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
 // SelectInt64 selects a single int64. Any PostgreSQL value representable as an int64 can be selected. An error will be
 // returned if no rows are found or a null value is found.
 func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{}) (int64, error) {

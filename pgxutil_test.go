@@ -144,6 +144,42 @@ func TestSelectAllByteSlice(t *testing.T) {
 	})
 }
 
+func TestSelectBool(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			result bool
+		}{
+			{"select true", true},
+			{"select false", false},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectBool(ctx, tx, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func TestSelectAllBool(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			result []bool
+		}{
+			{"select true union all select false", []bool{true, false}},
+			{"select true where false", nil},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectAllBool(ctx, tx, tt.sql)
+			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
 func TestSelectInt64(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
