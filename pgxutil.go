@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgsql"
 	"github.com/jackc/pgtype"
-	gofrs "github.com/jackc/pgtype/ext/gofrs-uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/shopspring/decimal"
 )
@@ -339,7 +338,7 @@ func SelectAllDecimal(ctx context.Context, db Queryer, sql string, args ...inter
 
 // SelectUUID selects a single uuid.UUID. An error will be returned if no rows are found or a null value is found.
 func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}) (uuid.UUID, error) {
-	var v gofrs.UUID
+	var v uuid.UUID
 	err := selectOneValueNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
 	})
@@ -347,19 +346,19 @@ func SelectUUID(ctx context.Context, db Queryer, sql string, args ...interface{}
 		return uuid.Nil, err
 	}
 
-	return v.UUID, nil
+	return v, nil
 }
 
 // SelectUUID selects a column of uuid.UUID. An error will be returned if a null value is found.
 func SelectAllUUID(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]uuid.UUID, error) {
 	var v []uuid.UUID
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
-		var u gofrs.UUID
+		var u uuid.UUID
 		err := rows.Scan(&u)
 		if err != nil {
 			return err
 		}
-		v = append(v, u.UUID)
+		v = append(v, u)
 		return nil
 	})
 	if err != nil {
