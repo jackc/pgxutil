@@ -7,10 +7,10 @@ import (
 	"reflect"
 
 	"github.com/gofrs/uuid"
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgsql"
-	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 )
 
@@ -292,7 +292,7 @@ func SelectAllFloat64(ctx context.Context, db Queryer, sql string, args ...inter
 // SelectDecimal selects a single decimal.Decimal. Any PostgreSQL value representable as an decimal can be selected.
 // An error will be returned if no rows are found or a null value is found.
 func SelectDecimal(ctx context.Context, db Queryer, sql string, args ...interface{}) (decimal.Decimal, error) {
-	var v pgtype.GenericText
+	var v pgtype.Text
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectOneValueNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan(&v)
@@ -315,7 +315,7 @@ func SelectAllDecimal(ctx context.Context, db Queryer, sql string, args ...inter
 	var v []decimal.Decimal
 	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectColumnNotNull(ctx, db, sql, args, func(rows pgx.Rows) error {
-		var t pgtype.GenericText
+		var t pgtype.Text
 		err := rows.Scan(&t)
 		if err != nil {
 			return err
