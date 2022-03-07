@@ -227,7 +227,7 @@ func SelectInt64(ctx context.Context, db Queryer, sql string, args ...interface{
 		return 0, err
 	}
 
-	return v.Int, nil
+	return v.Int64, nil
 }
 
 // SelectAllInt64 selects a column of int64. Any PostgreSQL value representable as an int64 can be selected. An error
@@ -241,7 +241,7 @@ func SelectAllInt64(ctx context.Context, db Queryer, sql string, args ...interfa
 		if err != nil {
 			return err
 		}
-		v = append(v, i8.Int)
+		v = append(v, i8.Int64)
 		return nil
 	})
 	if err != nil {
@@ -264,7 +264,7 @@ func SelectFloat64(ctx context.Context, db Queryer, sql string, args ...interfac
 		return 0, err
 	}
 
-	return v.Float, nil
+	return v.Float64, nil
 }
 
 // SelectAllFloat64 selects a single float64. Any PostgreSQL value representable as an float64 can be selected. However,
@@ -279,7 +279,7 @@ func SelectAllFloat64(ctx context.Context, db Queryer, sql string, args ...inter
 		if err != nil {
 			return err
 		}
-		v = append(v, f8.Float)
+		v = append(v, f8.Float64)
 		return nil
 	})
 	if err != nil {
