@@ -10,10 +10,25 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxtest"
 	"github.com/jackc/pgxutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var defaultConnTestRunner pgxtest.ConnTestRunner
+
+func init() {
+	defaultConnTestRunner = pgxtest.DefaultConnTestRunner()
+	defaultConnTestRunner.CreateConfig = func(ctx context.Context, t testing.TB) *pgx.ConnConfig {
+		config, err := pgx.ParseConfig(os.Getenv("TEST_DATABASE"))
+		require.NoError(t, err)
+		config.OnNotice = func(_ *pgconn.PgConn, n *pgconn.Notice) {
+			t.Logf("PostgreSQL %s: %s", n.Severity, n.Message)
+		}
+		return config
+	}
+}
 
 func withTx(t testing.TB, f func(ctx context.Context, tx pgx.Tx)) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

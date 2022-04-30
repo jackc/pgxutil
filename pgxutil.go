@@ -78,21 +78,28 @@ func selectRows(ctx context.Context, db Queryer, sql string, args []interface{},
 	return nil
 }
 
+type ValuesMapRowScanner map[string]any
+
+func (rs *ValuesMapRowScanner) ScanRow(rows pgx.Rows) error {
+	values, err := rows.Values()
+	if err != nil {
+		return err
+	}
+
+	*rs = make(ValuesMapRowScanner, len(values))
+
+	for i := range values {
+		(*rs)[string(rows.FieldDescriptions()[i].Name)] = values[i]
+	}
+
+	return nil
+}
+
 // SelectMap selects a single row into a map. An error will be returned if no rows are found.
 func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{}) (map[string]interface{}, error) {
 	var v map[string]interface{}
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
-		values, err := rows.Values()
-		if err != nil {
-			return err
-		}
-
-		v = make(map[string]interface{}, len(values))
-		for i := range values {
-			v[string(rows.FieldDescriptions()[i].Name)] = values[i]
-		}
-
-		return err
+		return rows.Scan((*ValuesMapRowScanner)(&v))
 	})
 	if err != nil {
 		return nil, err
@@ -105,14 +112,10 @@ func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{})
 func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]interface{}, error) {
 	var v []map[string]interface{}
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
-		values, err := rows.Values()
+		var m map[string]interface{}
+		err := rows.Scan((*ValuesMapRowScanner)(&m))
 		if err != nil {
 			return err
-		}
-
-		m := make(map[string]interface{}, len(values))
-		for i := range values {
-			m[string(rows.FieldDescriptions()[i].Name)] = values[i]
 		}
 
 		v = append(v, m)
