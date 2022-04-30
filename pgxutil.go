@@ -18,14 +18,14 @@ var errMultipleColumns = errors.New("multiple columns in result set")
 var errMultipleRows = errors.New("multiple rows in result set")
 
 type Queryer interface {
-	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 type Execer interface {
-	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-func selectColumn(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+func selectColumn(ctx context.Context, db Queryer, sql string, args []any, rowFn func(pgx.Rows) error) error {
 	return selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
 		if len(rows.RawValues()) == 0 {
 			rows.Close()
@@ -40,7 +40,7 @@ func selectColumn(ctx context.Context, db Queryer, sql string, args []interface{
 	})
 }
 
-func selectOneRow(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+func selectOneRow(ctx context.Context, db Queryer, sql string, args []any, rowFn func(pgx.Rows) error) error {
 	rowCount := 0
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
 		rowCount += 1
@@ -60,7 +60,7 @@ func selectOneRow(ctx context.Context, db Queryer, sql string, args []interface{
 	return nil
 }
 
-func selectRows(ctx context.Context, db Queryer, sql string, args []interface{}, rowFn func(pgx.Rows) error) error {
+func selectRows(ctx context.Context, db Queryer, sql string, args []any, rowFn func(pgx.Rows) error) error {
 	rows, _ := db.Query(ctx, sql, args...)
 
 	for rows.Next() {
@@ -96,8 +96,8 @@ func (rs *ValuesMapRowScanner) ScanRow(rows pgx.Rows) error {
 }
 
 // SelectMap selects a single row into a map. An error will be returned if no rows are found.
-func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{}) (map[string]interface{}, error) {
-	var v map[string]interface{}
+func SelectMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]any, error) {
+	var v map[string]any
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
 		return rows.Scan((*ValuesMapRowScanner)(&v))
 	})
@@ -109,10 +109,10 @@ func SelectMap(ctx context.Context, db Queryer, sql string, args ...interface{})
 }
 
 // SelectAllMap selects rows into a map slice.
-func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]interface{}, error) {
-	var v []map[string]interface{}
+func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...any) ([]map[string]any, error) {
+	var v []map[string]any
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
-		var m map[string]interface{}
+		var m map[string]any
 		err := rows.Scan((*ValuesMapRowScanner)(&m))
 		if err != nil {
 			return err
@@ -131,9 +131,9 @@ func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...interface
 
 // SelectStringMap selects a single row into a map where all values are strings. An error will be returned if no rows
 // are found.
-func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...interface{}) (map[string]string, error) {
+func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]string, error) {
 	var v map[string]string
-	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	args = append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values := rows.RawValues()
 		v = make(map[string]string, len(values))
@@ -150,9 +150,9 @@ func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...interf
 }
 
 // SelectAllStringMap selects rows into a map slice where all values are strings.
-func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...interface{}) ([]map[string]string, error) {
+func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...any) ([]map[string]string, error) {
 	var v []map[string]string
-	args = append([]interface{}{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
+	args = append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
 		values := rows.RawValues()
 		m := make(map[string]string, len(values))
@@ -173,7 +173,7 @@ func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...int
 
 // SelectStruct selects a single row into struct dst. An error will be returned if no rows are found. The values are
 // assigned positionally to the exported struct fields.
-func SelectStruct(ctx context.Context, db Queryer, dst interface{}, sql string, args ...interface{}) error {
+func SelectStruct(ctx context.Context, db Queryer, dst any, sql string, args ...any) error {
 	dstValue := reflect.ValueOf(dst)
 	if dstValue.Kind() != reflect.Ptr {
 		return fmt.Errorf("dst not a pointer")
@@ -196,7 +196,7 @@ func SelectStruct(ctx context.Context, db Queryer, dst interface{}, sql string, 
 			return fmt.Errorf("got %d values, but dst struct has only %d fields", rowFieldCount, len(exportedFields))
 		}
 
-		scanTargets := make([]interface{}, rowFieldCount)
+		scanTargets := make([]any, rowFieldCount)
 		for i := 0; i < rowFieldCount; i++ {
 			scanTargets[i] = dstElemValue.Field(exportedFields[i]).Addr().Interface()
 		}
@@ -212,7 +212,7 @@ func SelectStruct(ctx context.Context, db Queryer, dst interface{}, sql string, 
 
 // SelectAllStruct selects rows into dst. dst must be a slice of struct or pointer to struct. The values are assigned
 // positionally to the exported struct fields.
-func SelectAllStruct(ctx context.Context, db Queryer, dst interface{}, sql string, args ...interface{}) error {
+func SelectAllStruct(ctx context.Context, db Queryer, dst any, sql string, args ...any) error {
 	ptrSliceValue := reflect.ValueOf(dst)
 	if ptrSliceValue.Kind() != reflect.Ptr {
 		return fmt.Errorf("dst not a pointer")
@@ -267,7 +267,7 @@ func SelectAllStruct(ctx context.Context, db Queryer, dst interface{}, sql strin
 			fieldableValue = appendableValue
 		}
 
-		scanTargets := make([]interface{}, rowFieldCount)
+		scanTargets := make([]any, rowFieldCount)
 		for i := 0; i < rowFieldCount; i++ {
 			scanTargets[i] = fieldableValue.Field(exportedFields[i]).Addr().Interface()
 		}
@@ -291,14 +291,14 @@ func SelectAllStruct(ctx context.Context, db Queryer, dst interface{}, sql strin
 }
 
 // Insert inserts a row and returns the resulting row.
-func Insert(ctx context.Context, db Queryer, tableName string, values map[string]interface{}) (map[string]interface{}, error) {
+func Insert(ctx context.Context, db Queryer, tableName string, values map[string]any) (map[string]any, error) {
 	stmt := pgsql.Insert(tableName).Data(pgsql.RowMap(values)).Returning("*")
 	sql, args := pgsql.Build(stmt)
 	return SelectMap(ctx, db, sql, args...)
 }
 
 // Update executes an update statement and returns the number of rows updated.
-func Update(ctx context.Context, db Execer, tableName string, setValues, whereArgs map[string]interface{}) (int64, error) {
+func Update(ctx context.Context, db Execer, tableName string, setValues, whereArgs map[string]any) (int64, error) {
 	stmt := pgsql.Update(tableName).Set(pgsql.RowMap(setValues))
 	if whereArgs != nil {
 		for k, v := range whereArgs {
@@ -311,7 +311,7 @@ func Update(ctx context.Context, db Execer, tableName string, setValues, whereAr
 }
 
 // SelectValue selects a single T. An error will be returned if no rows are found.
-func SelectValue[T any](ctx context.Context, db Queryer, sql string, args ...interface{}) (T, error) {
+func SelectValue[T any](ctx context.Context, db Queryer, sql string, args ...any) (T, error) {
 	var v T
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
 		if len(rows.RawValues()) == 0 {
@@ -335,7 +335,7 @@ func SelectValue[T any](ctx context.Context, db Queryer, sql string, args ...int
 }
 
 // SelectColumn selects a column of T.
-func SelectColumn[T any](ctx context.Context, db Queryer, sql string, args ...interface{}) ([]T, error) {
+func SelectColumn[T any](ctx context.Context, db Queryer, sql string, args ...any) ([]T, error) {
 	column := []T{}
 
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {

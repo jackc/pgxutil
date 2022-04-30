@@ -67,9 +67,9 @@ func TestSelectMap(t *testing.T) {
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
 		tests := []struct {
 			sql    string
-			result map[string]interface{}
+			result map[string]any
 		}{
-			{"select 'Adam' as name, 72 as height", map[string]interface{}{"name": "Adam", "height": int32(72)}},
+			{"select 'Adam' as name, 72 as height", map[string]any{"name": "Adam", "height": int32(72)}},
 		}
 		for i, tt := range tests {
 			v, err := pgxutil.SelectMap(ctx, tx, tt.sql)
@@ -84,11 +84,11 @@ func TestSelectAllMap(t *testing.T) {
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
 		tests := []struct {
 			sql    string
-			result []map[string]interface{}
+			result []map[string]any
 		}{
 			{
 				sql: "select n as a, n+1 as b from generate_series(1,2) n",
-				result: []map[string]interface{}{
+				result: []map[string]any{
 					{"a": int32(1), "b": int32(2)},
 					{"a": int32(2), "b": int32(3)},
 				},
@@ -434,7 +434,7 @@ func TestInsert(t *testing.T) {
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
 		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
 		require.NoError(t, err)
-		returningRow, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		returningRow, err := pgxutil.Insert(ctx, tx, "t", map[string]any{"name": "Adam", "height": 72})
 		require.NoError(t, err)
 
 		assert.Equal(t, int32(1), returningRow["id"])
@@ -452,12 +452,12 @@ func TestUpdateWithoutWhere(t *testing.T) {
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
 		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
 		require.NoError(t, err)
-		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]any{"name": "Adam", "height": 72})
 		require.NoError(t, err)
-		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Bill", "height": 68})
+		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]any{"name": "Bill", "height": 68})
 		require.NoError(t, err)
 
-		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]interface{}{"height": 99}, nil)
+		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]any{"height": 99}, nil)
 		require.NoError(t, err)
 		assert.EqualValues(t, 2, updateCount)
 
@@ -475,12 +475,12 @@ func TestUpdateWithWhere(t *testing.T) {
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
 		_, err := tx.Exec(ctx, `create temporary table t (id serial primary key, name text, height int)`)
 		require.NoError(t, err)
-		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Adam", "height": 72})
+		row1, err := pgxutil.Insert(ctx, tx, "t", map[string]any{"name": "Adam", "height": 72})
 		require.NoError(t, err)
-		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]interface{}{"name": "Bill", "height": 68})
+		row2, err := pgxutil.Insert(ctx, tx, "t", map[string]any{"name": "Bill", "height": 68})
 		require.NoError(t, err)
 
-		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]interface{}{"height": 99}, map[string]interface{}{"id": row1["id"]})
+		updateCount, err := pgxutil.Update(ctx, tx, "t", map[string]any{"height": 99}, map[string]any{"id": row1["id"]})
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), updateCount)
 
@@ -553,7 +553,7 @@ func TestSelectValueErrors(t *testing.T) {
 		tests := []struct {
 			sql    string
 			err    string
-			result interface{}
+			result any
 		}{
 			{"select 42::float8 where 1=0", "no rows in result set", nil},
 			{"select 42::float8 from generate_series(1,2)", "multiple rows in result set", nil},
