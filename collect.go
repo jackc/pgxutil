@@ -2,9 +2,9 @@ package pgxutil
 
 import "github.com/jackc/pgx/v5"
 
-func Collect[T any](rows pgx.Rows, dest []T, scanner func(rows pgx.Rows) (T, error)) ([]T, error) {
+func Collect[T any](rows pgx.Rows, dest []T, scan func(rows pgx.Rows) (T, error)) ([]T, error) {
 	for rows.Next() {
-		value, err := scanner(rows)
+		value, err := scan(rows)
 		if err != nil {
 			rows.Close()
 			return nil, err
@@ -17,4 +17,36 @@ func Collect[T any](rows pgx.Rows, dest []T, scanner func(rows pgx.Rows) (T, err
 	}
 
 	return dest, nil
+}
+
+func CollectScanValue[T any](rows pgx.Rows) (T, error) {
+	var v T
+	err := rows.Scan(&v)
+	return v, err
+}
+
+func CollectScanPointer[T any](rows pgx.Rows) (*T, error) {
+	var v T
+	err := rows.Scan(&v)
+	return &v, err
+}
+
+func PSRS[T any](v *T) any {
+	return PositionalStructRowScanner(v)
+}
+
+func CollectScanValueConvert[T any](f func(v *T) any) func(rows pgx.Rows) (T, error) {
+	return func(rows pgx.Rows) (T, error) {
+		var v T
+		err := rows.Scan(f(&v))
+		return v, err
+	}
+}
+
+func CollectScanPointerConvert[T any](f func(v *T) any) func(rows pgx.Rows) (*T, error) {
+	return func(rows pgx.Rows) (*T, error) {
+		var v T
+		err := rows.Scan(f(&v))
+		return &v, err
+	}
 }

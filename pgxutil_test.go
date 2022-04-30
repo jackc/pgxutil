@@ -323,7 +323,7 @@ func BenchmarkSelectAllRows(b *testing.B) {
 		}
 	})
 
-	b.Run("Scan Collect Pointer to Struct", func(b *testing.B) {
+	b.Run("Scan Manually Collect Pointer to Struct", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var people []*person
 			rows, err := conn.Query(ctx, sql)
@@ -351,7 +351,7 @@ func BenchmarkSelectAllRows(b *testing.B) {
 		}
 	})
 
-	b.Run("Scan Collect Struct", func(b *testing.B) {
+	b.Run("Scan Manually Collect Struct", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var people []person
 			rows, err := conn.Query(ctx, sql)
@@ -371,6 +371,42 @@ func BenchmarkSelectAllRows(b *testing.B) {
 
 			if rows.Err() != nil {
 				b.Fatal(rows.Err())
+			}
+
+			for i := range people {
+				validateStruct(b, &people[i])
+			}
+		}
+	})
+
+	b.Run("Scan Collect Pointer to Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rows, _ := conn.Query(ctx, sql)
+			people, err := pgxutil.Collect(rows, []*person{}, func(rows pgx.Rows) (*person, error) {
+				var p person
+				err := rows.Scan(&p.FirstName, &p.LastName, &p.Height)
+				return &p, err
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, p := range people {
+				validateStruct(b, p)
+			}
+		}
+	})
+
+	b.Run("Scan Collect Struct", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rows, _ := conn.Query(ctx, sql)
+			people, err := pgxutil.Collect(rows, []person{}, func(rows pgx.Rows) (person, error) {
+				var p person
+				err := rows.Scan(&p.FirstName, &p.LastName, &p.Height)
+				return p, err
+			})
+			if err != nil {
+				b.Fatal(err)
 			}
 
 			for i := range people {
@@ -424,6 +460,22 @@ func BenchmarkSelectAllRows(b *testing.B) {
 
 			for i := range people {
 				validateStruct(b, &people[i])
+			}
+		}
+	})
+
+	b.Run("Scan Collect Pointer to Struct PositionalStructRowScanner", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rows, _ := conn.Query(ctx, sql)
+			people, err := pgxutil.Collect(rows, []*person{}, pgxutil.CollectScanPointerConvert(func(v *person) any {
+				return pgxutil.PositionalStructRowScanner(v)
+			}))
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, p := range people {
+				validateStruct(b, p)
 			}
 		}
 	})
