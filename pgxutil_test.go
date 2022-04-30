@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgxutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,49 +48,6 @@ func closeConn(t testing.TB, conn *pgx.Conn) {
 	require.NoError(t, conn.Close(ctx))
 }
 
-func TestSelectOneCommonErrors(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			err    string
-			result interface{}
-		}{
-			{"select 42::float8 where 1=0", "no rows in result set", nil},
-			{"select 42::float8 from generate_series(1,2)", "multiple rows in result set", nil},
-			{"select", "no columns in result set", nil},
-			{"select 1, 2", "multiple columns in result set", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectValue(ctx, tx, tt.sql)
-			if tt.err == "" {
-				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			} else {
-				assert.EqualErrorf(t, err, tt.err, "%d. %s", i, tt.sql)
-			}
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectString(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result string
-		}{
-			{"select 'Hello, world!'", "Hello, world!"},
-			{"select 42", "42"},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectString(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
 func TestSelectAllString(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
@@ -102,24 +60,6 @@ func TestSelectAllString(t *testing.T) {
 		}
 		for i, tt := range tests {
 			v, err := pgxutil.SelectAllString(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectByteSlice(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []byte
-		}{
-			{"select 'Hello, world!'", []byte("Hello, world!")},
-			{"select 42", []byte{0, 0, 0, 42}},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectByteSlice(ctx, tx, tt.sql)
 			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
 		}
@@ -144,24 +84,6 @@ func TestSelectAllByteSlice(t *testing.T) {
 	})
 }
 
-func TestSelectBool(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result bool
-		}{
-			{"select true", true},
-			{"select false", false},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectBool(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
 func TestSelectAllBool(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
@@ -174,24 +96,6 @@ func TestSelectAllBool(t *testing.T) {
 		}
 		for i, tt := range tests {
 			v, err := pgxutil.SelectAllBool(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectInt64(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result int64
-		}{
-			{"select 99999999999::bigint", 99999999999},
-			{"select 42::smallint", 42},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectInt64(ctx, tx, tt.sql)
 			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
 		}
@@ -216,27 +120,6 @@ func TestSelectAllInt64(t *testing.T) {
 	})
 }
 
-func TestSelectFloat64(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result float64
-		}{
-			{"select 1.2345::float8", 1.2345},
-			{"select 1.23::float4", 1.23},
-			{"select 1.2345::numeric", 1.2345},
-			{"select 99999999999::bigint", 99999999999},
-			{"select 42::smallint", 42},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectFloat64(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
 func TestSelectAllFloat64(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
@@ -251,27 +134,6 @@ func TestSelectAllFloat64(t *testing.T) {
 			v, err := pgxutil.SelectAllFloat64(ctx, tx, tt.sql)
 			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectDecimal(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result string
-		}{
-			{"select 1.2345::numeric", "1.2345"},
-			{"select 1.2345::float8", "1.2345"},
-			{"select 1.23::float4", "1.23"},
-			{"select 99999999999::bigint", "99999999999"},
-			{"select 42::smallint", "42"},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectDecimal(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v.String(), "%d. %s", i, tt.sql)
 		}
 	})
 }
@@ -298,23 +160,6 @@ func TestSelectAllDecimal(t *testing.T) {
 	})
 }
 
-func TestSelectUUID(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result uuid.UUID
-		}{
-			{"select '27fd10c1-bccc-4efd-9fea-093f86c95089'::uuid", uuid.FromStringOrNil("27fd10c1-bccc-4efd-9fea-093f86c95089")},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectUUID(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
 func TestSelectAllUUID(t *testing.T) {
 	t.Parallel()
 	withTx(t, func(ctx context.Context, tx pgx.Tx) {
@@ -336,26 +181,6 @@ func TestSelectAllUUID(t *testing.T) {
 		}
 		for i, tt := range tests {
 			v, err := pgxutil.SelectAllUUID(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectValue(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result interface{}
-		}{
-			{"select 'Hello'", "Hello"},
-			{"select 42", int32(42)},
-			{"select 1.23::float4", float32(1.23)},
-			{"select null::float4", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectValue(ctx, tx, tt.sql)
 			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
 		}
@@ -810,5 +635,81 @@ func TestUpdateWithWhere(t *testing.T) {
 		freshRow2, err := pgxutil.SelectMap(ctx, tx, "select * from t where id=$1", row2["id"])
 		require.NoError(t, err)
 		assert.Equal(t, row2, freshRow2)
+	})
+}
+
+func TestSelectValue(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		{
+			v, err := pgxutil.SelectValue[bool](ctx, tx, "select true")
+			assert.NoError(t, err)
+			assert.Equal(t, true, v)
+		}
+		{
+			v, err := pgxutil.SelectValue[bool](ctx, tx, "select false")
+			assert.NoError(t, err)
+			assert.Equal(t, false, v)
+		}
+		{
+			v, err := pgxutil.SelectValue[int32](ctx, tx, "select 42")
+			assert.NoError(t, err)
+			assert.Equal(t, int32(42), v)
+		}
+		{
+			v, err := pgxutil.SelectValue[pgtype.Int4](ctx, tx, "select null::int4")
+			assert.NoError(t, err)
+			assert.Equal(t, pgtype.Int4{}, v)
+		}
+		{
+			v, err := pgxutil.SelectValue[float64](ctx, tx, "select 1.23::float8")
+			assert.NoError(t, err)
+			assert.Equal(t, float64(1.23), v)
+		}
+		{
+			v, err := pgxutil.SelectValue[string](ctx, tx, "select 'foo'::text")
+			assert.NoError(t, err)
+			assert.Equal(t, "foo", v)
+		}
+		{
+			v, err := pgxutil.SelectValue[[]byte](ctx, tx, `select '\x01020304'::bytea`)
+			assert.NoError(t, err)
+			assert.Equal(t, []byte{1, 2, 3, 4}, v)
+		}
+		{
+			v, err := pgxutil.SelectValue[string](ctx, tx, "select '25f6ef51-6795-4ca8-b2df-bafabd36ba23'::uuid")
+			assert.NoError(t, err)
+			assert.Equal(t, "25f6ef51-6795-4ca8-b2df-bafabd36ba23", v)
+		}
+		{
+			v, err := pgxutil.SelectValue[any](ctx, tx, "select 1.23::float8")
+			assert.NoError(t, err)
+			assert.Equal(t, float64(1.23), v)
+		}
+	})
+}
+
+func TestSelectValueErrors(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			err    string
+			result interface{}
+		}{
+			{"select 42::float8 where 1=0", "no rows in result set", nil},
+			{"select 42::float8 from generate_series(1,2)", "multiple rows in result set", nil},
+			{"select", "no columns in result set", nil},
+			{"select 1, 2", "multiple columns in result set", nil},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectValue[any](ctx, tx, tt.sql)
+			if tt.err == "" {
+				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			} else {
+				assert.EqualErrorf(t, err, tt.err, "%d. %s", i, tt.sql)
+			}
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
 	})
 }
