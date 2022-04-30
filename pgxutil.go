@@ -78,28 +78,11 @@ func selectRows(ctx context.Context, db Queryer, sql string, args []any, rowFn f
 	return nil
 }
 
-type ValuesMapRowScanner map[string]any
-
-func (rs *ValuesMapRowScanner) ScanRow(rows pgx.Rows) error {
-	values, err := rows.Values()
-	if err != nil {
-		return err
-	}
-
-	*rs = make(ValuesMapRowScanner, len(values))
-
-	for i := range values {
-		(*rs)[string(rows.FieldDescriptions()[i].Name)] = values[i]
-	}
-
-	return nil
-}
-
 // SelectMap selects a single row into a map. An error will be returned if no rows are found.
 func SelectMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]any, error) {
 	var v map[string]any
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
-		return rows.Scan((*ValuesMapRowScanner)(&v))
+		return rows.Scan((*mapRowScanner)(&v))
 	})
 	if err != nil {
 		return nil, err
@@ -113,7 +96,7 @@ func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...any) ([]m
 	var v []map[string]any
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
 		var m map[string]any
-		err := rows.Scan((*ValuesMapRowScanner)(&m))
+		err := rows.Scan((*mapRowScanner)(&m))
 		if err != nil {
 			return err
 		}
@@ -169,45 +152,6 @@ func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...any
 	}
 
 	return v, nil
-}
-
-type positionalStructRowScanner struct {
-	ptrToStruct any
-}
-
-func (rs *positionalStructRowScanner) ScanRow(rows pgx.Rows) error {
-	dst := rs.ptrToStruct
-	dstValue := reflect.ValueOf(dst)
-	if dstValue.Kind() != reflect.Ptr {
-		return fmt.Errorf("dst not a pointer")
-	}
-
-	dstElemValue := dstValue.Elem()
-	dstElemType := dstElemValue.Type()
-
-	exportedFields := make([]int, 0, dstElemType.NumField())
-	for i := 0; i < dstElemType.NumField(); i++ {
-		sf := dstElemType.Field(i)
-		if sf.PkgPath == "" {
-			exportedFields = append(exportedFields, i)
-		}
-	}
-
-	rowFieldCount := len(rows.RawValues())
-	if rowFieldCount > len(exportedFields) {
-		return fmt.Errorf("got %d values, but dst struct has only %d fields", rowFieldCount, len(exportedFields))
-	}
-
-	scanTargets := make([]any, rowFieldCount)
-	for i := 0; i < rowFieldCount; i++ {
-		scanTargets[i] = dstElemValue.Field(exportedFields[i]).Addr().Interface()
-	}
-
-	return rows.Scan(scanTargets...)
-}
-
-func PositionalStructRowScanner(ptrToStruct any) pgx.RowScanner {
-	return &positionalStructRowScanner{ptrToStruct: ptrToStruct}
 }
 
 // SelectStruct selects a single row into struct dst. An error will be returned if no rows are found. The values are

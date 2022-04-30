@@ -382,7 +382,7 @@ func BenchmarkSelectAllRows(b *testing.B) {
 	b.Run("Scan Collect Pointer to Struct", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			rows, _ := conn.Query(ctx, sql)
-			people, err := pgxutil.Collect(rows, []*person{}, func(rows pgx.Rows) (*person, error) {
+			people, err := pgxutil.Collect(rows, func(rows pgx.Rows) (*person, error) {
 				var p person
 				err := rows.Scan(&p.FirstName, &p.LastName, &p.Height)
 				return &p, err
@@ -400,7 +400,7 @@ func BenchmarkSelectAllRows(b *testing.B) {
 	b.Run("Scan Collect Struct", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			rows, _ := conn.Query(ctx, sql)
-			people, err := pgxutil.Collect(rows, []person{}, func(rows pgx.Rows) (person, error) {
+			people, err := pgxutil.Collect(rows, func(rows pgx.Rows) (person, error) {
 				var p person
 				err := rows.Scan(&p.FirstName, &p.LastName, &p.Height)
 				return p, err
@@ -418,6 +418,28 @@ func BenchmarkSelectAllRows(b *testing.B) {
 	b.Run("SelectAllMap", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			people, err := pgxutil.SelectAllMap(ctx, conn, sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for _, p := range people {
+				if p["first_name"] != "Adam" {
+					b.Fatal("unexpected value read")
+				}
+				if p["last_name"] != "Smith" {
+					b.Fatal("unexpected value read")
+				}
+				if p["height"] != int32(72) {
+					b.Fatal("unexpected value read")
+				}
+			}
+		}
+	})
+
+	b.Run("Collect ScanMap", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rows, _ := conn.Query(ctx, sql)
+			people, err := pgxutil.Collect(rows, pgxutil.ScanMap)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -464,12 +486,10 @@ func BenchmarkSelectAllRows(b *testing.B) {
 		}
 	})
 
-	b.Run("Scan Collect Pointer to Struct PositionalStructRowScanner", func(b *testing.B) {
+	b.Run("Collect ScanAddrOfStructPos", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			rows, _ := conn.Query(ctx, sql)
-			people, err := pgxutil.Collect(rows, []*person{}, pgxutil.CollectScanPointerConvert(func(v *person) any {
-				return pgxutil.PositionalStructRowScanner(v)
-			}))
+			people, err := pgxutil.Collect(rows, pgxutil.ScanAddrOfStructPos[person])
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -12,9 +12,8 @@ import (
 
 func TestCollect(t *testing.T) {
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select n from generate_series(0, 99) n`)
-		require.NoError(t, err)
-		numbers, err := pgxutil.Collect(rows, []int32{}, func(rows pgx.Rows) (int32, error) {
+		rows, _ := conn.Query(ctx, `select n from generate_series(0, 99) n`)
+		numbers, err := pgxutil.Collect(rows, func(rows pgx.Rows) (int32, error) {
 			var n int32
 			err := rows.Scan(&n)
 			return n, err
@@ -28,11 +27,10 @@ func TestCollect(t *testing.T) {
 	})
 }
 
-func TestCollectValueScanner(t *testing.T) {
+func TestScan(t *testing.T) {
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select n from generate_series(0, 99) n`)
-		require.NoError(t, err)
-		numbers, err := pgxutil.Collect(rows, []int32{}, pgxutil.CollectScanValue[int32])
+		rows, _ := conn.Query(ctx, `select n from generate_series(0, 99) n`)
+		numbers, err := pgxutil.Collect(rows, pgxutil.Scan[int32])
 		require.NoError(t, err)
 
 		assert.Len(t, numbers, 100)
@@ -42,11 +40,10 @@ func TestCollectValueScanner(t *testing.T) {
 	})
 }
 
-func TestCollectPointerScanner(t *testing.T) {
+func TestScanAddrOf(t *testing.T) {
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select n from generate_series(0, 99) n`)
-		require.NoError(t, err)
-		numbers, err := pgxutil.Collect(rows, []*int32{}, pgxutil.CollectScanPointer[int32])
+		rows, _ := conn.Query(ctx, `select n from generate_series(0, 99) n`)
+		numbers, err := pgxutil.Collect(rows, pgxutil.ScanAddrOf[int32])
 		require.NoError(t, err)
 
 		assert.Len(t, numbers, 100)
@@ -56,15 +53,10 @@ func TestCollectPointerScanner(t *testing.T) {
 	})
 }
 
-func TestCollectValuesMapRowScanner(t *testing.T) {
+func TestScanMap(t *testing.T) {
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
-		require.NoError(t, err)
-		slice, err := pgxutil.Collect(rows, []map[string]any{}, func(rows pgx.Rows) (map[string]any, error) {
-			var m map[string]any
-			err := rows.Scan((*pgxutil.ValuesMapRowScanner)(&m))
-			return m, err
-		})
+		rows, _ := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
+		slice, err := pgxutil.Collect(rows, pgxutil.ScanMap)
 		require.NoError(t, err)
 
 		assert.Len(t, slice, 10)
@@ -75,59 +67,40 @@ func TestCollectValuesMapRowScanner(t *testing.T) {
 	})
 }
 
-func TestScanValueConvert(t *testing.T) {
+func TestScanStructPos(t *testing.T) {
+	type person struct {
+		Name string
+		Age  int32
+	}
+
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
-		require.NoError(t, err)
-		slice, err := pgxutil.Collect(rows, []map[string]any{}, pgxutil.CollectScanValueConvert(func(v *map[string]any) any { return (*pgxutil.ValuesMapRowScanner)(v) }))
+		rows, _ := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
+		slice, err := pgxutil.Collect(rows, pgxutil.ScanStructPos[person])
 		require.NoError(t, err)
 
 		assert.Len(t, slice, 10)
 		for i := range slice {
-			assert.Equal(t, "Joe", slice[i]["name"])
-			assert.EqualValues(t, i, slice[i]["age"])
+			assert.Equal(t, "Joe", slice[i].Name)
+			assert.EqualValues(t, i, slice[i].Age)
 		}
 	})
 }
 
-func TestScanPointerConvert(t *testing.T) {
+func TestScanAddrOfStructPos(t *testing.T) {
 	type person struct {
 		Name string
 		Age  int32
 	}
 
 	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
-		require.NoError(t, err)
-		people, err := pgxutil.Collect(rows, []*person{}, pgxutil.CollectScanPointerConvert(func(v *person) any {
-			return pgxutil.PositionalStructRowScanner(v)
-		}))
+		rows, _ := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
+		slice, err := pgxutil.Collect(rows, pgxutil.ScanAddrOfStructPos[person])
 		require.NoError(t, err)
 
-		assert.Len(t, people, 10)
-		for i := range people {
-			assert.Equal(t, "Joe", people[i].Name)
-			assert.Equal(t, int32(i), people[i].Age)
-		}
-	})
-}
-
-func TestScanPointerConvertPSRS(t *testing.T) {
-	type person struct {
-		Name string
-		Age  int32
-	}
-
-	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
-		rows, err := conn.Query(ctx, `select 'Joe' as name, n as age from generate_series(0, 9) n`)
-		require.NoError(t, err)
-		people, err := pgxutil.Collect(rows, []*person{}, pgxutil.CollectScanPointerConvert(pgxutil.PSRS[person]))
-		require.NoError(t, err)
-
-		assert.Len(t, people, 10)
-		for i := range people {
-			assert.Equal(t, "Joe", people[i].Name)
-			assert.Equal(t, int32(i), people[i].Age)
+		assert.Len(t, slice, 10)
+		for i := range slice {
+			assert.Equal(t, "Joe", slice[i].Name)
+			assert.EqualValues(t, i, slice[i].Age)
 		}
 	})
 }
