@@ -3,10 +3,11 @@ package pgxutil
 import "github.com/jackc/pgx/v5"
 
 func Collect[T any](rows pgx.Rows, dest []T, scan func(rows pgx.Rows) (T, error)) ([]T, error) {
+	defer rows.Close()
+
 	for rows.Next() {
 		value, err := scan(rows)
 		if err != nil {
-			rows.Close()
 			return nil, err
 		}
 		dest = append(dest, value)
