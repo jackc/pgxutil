@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -46,162 +45,6 @@ func closeConn(t testing.TB, conn *pgx.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, conn.Close(ctx))
-}
-
-func TestSelectAllString(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []string
-		}{
-			{"select format('Hello %s', n) from generate_series(1,2) n", []string{"Hello 1", "Hello 2"}},
-			{"select 'Hello, world!' where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllString(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllByteSlice(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result [][]byte
-		}{
-			{"select format('Hello %s', n) from generate_series(1,2) n", [][]byte{[]byte("Hello 1"), []byte("Hello 2")}},
-			{"select 'Hello, world!' where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllByteSlice(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllBool(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []bool
-		}{
-			{"select true union all select false", []bool{true, false}},
-			{"select true where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllBool(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllInt64(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []int64
-		}{
-			{"select generate_series(1,2)", []int64{1, 2}},
-			{"select 42 where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllInt64(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllFloat64(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []float64
-		}{
-			{"select n + 0.5 from generate_series(1,2) n", []float64{1.5, 2.5}},
-			{"select 42.0 where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllFloat64(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllDecimal(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []string
-		}{
-			{"select n + 0.5 from generate_series(1,2) n", []string{"1.5", "2.5"}},
-			{"select 42.0 where false", nil},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllDecimal(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			if assert.Equalf(t, len(tt.result), len(v), "%d. %s", i, tt.sql) {
-				for j := range v {
-					assert.Equalf(t, tt.result[j], v[j].String(), "%d. %s - %d", i, tt.sql, j)
-				}
-			}
-		}
-	})
-}
-
-func TestSelectAllUUID(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []uuid.UUID
-		}{
-			{
-				sql: "select format('27fd10c1-bccc-4efd-9fea-093f86c9508%s', n)::uuid from generate_series(1,2) n",
-				result: []uuid.UUID{
-					uuid.FromStringOrNil("27fd10c1-bccc-4efd-9fea-093f86c95081"),
-					uuid.FromStringOrNil("27fd10c1-bccc-4efd-9fea-093f86c95082"),
-				},
-			},
-			{
-				sql:    "select '27fd10c1-bccc-4efd-9fea-093f86c95089'::uuid where false",
-				result: nil,
-			},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllUUID(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
-}
-
-func TestSelectAllValue(t *testing.T) {
-	t.Parallel()
-	withTx(t, func(ctx context.Context, tx pgx.Tx) {
-		tests := []struct {
-			sql    string
-			result []interface{}
-		}{
-			{"select n from generate_series(1,2) n", []interface{}{int32(1), int32(2)}},
-		}
-		for i, tt := range tests {
-			v, err := pgxutil.SelectAllValue(ctx, tx, tt.sql)
-			assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
-			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
-		}
-	})
 }
 
 func TestSelectMap(t *testing.T) {
@@ -704,6 +547,45 @@ func TestSelectValueErrors(t *testing.T) {
 		}
 		for i, tt := range tests {
 			v, err := pgxutil.SelectValue[any](ctx, tx, tt.sql)
+			if tt.err == "" {
+				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
+			} else {
+				assert.EqualErrorf(t, err, tt.err, "%d. %s", i, tt.sql)
+			}
+			assert.Equalf(t, tt.result, v, "%d. %s", i, tt.sql)
+		}
+	})
+}
+
+func TestSelectColumn(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		{
+			c, err := pgxutil.SelectColumn[string](ctx, tx, "select format('Hello %s', n) from generate_series(1,2) n")
+			assert.NoError(t, err)
+			assert.Equal(t, []string{"Hello 1", "Hello 2"}, c)
+		}
+		{
+			c, err := pgxutil.SelectColumn[string](ctx, tx, "select 'Hello, world!' where false")
+			assert.NoError(t, err)
+			assert.Equal(t, []string{}, c)
+		}
+	})
+}
+
+func TestSelectColumnErrors(t *testing.T) {
+	t.Parallel()
+	withTx(t, func(ctx context.Context, tx pgx.Tx) {
+		tests := []struct {
+			sql    string
+			err    string
+			result any
+		}{
+			{"select", "no columns in result set", []any(nil)},
+			{"select 1, 2", "multiple columns in result set", []any(nil)},
+		}
+		for i, tt := range tests {
+			v, err := pgxutil.SelectColumn[any](ctx, tx, tt.sql)
 			if tt.err == "" {
 				assert.NoErrorf(t, err, "%d. %s", i, tt.sql)
 			} else {

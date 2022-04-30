@@ -3,10 +3,8 @@ module github.com/jackc/pgxutil
 go 1.18
 
 require (
-	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/jackc/pgsql v0.0.0-20200214204435-ebb58a15ff4a
 	github.com/jackc/pgx/v5 v5.0.0-alpha.3.0.20220430132951-01190e5d78a4
-	github.com/shopspring/decimal v1.2.0
 	github.com/stretchr/testify v1.7.0
 )
 

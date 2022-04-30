@@ -65,8 +65,6 @@ github.com/jackc/pgx/v4 v4.4.0/go.mod h1:BuiWNtbS8ublfZdrCJo1dUiMHxUNe0Fk8eufUGN
 github.com/jackc/pgx/v4 v4.12.1-0.20210724153913-640aa07df17c/go.mod h1:1QD0+tgSXP7iUjYm9C1NxKhny7lq6ee99u/z+IHFcgs=
 github.com/jackc/pgx/v4 v4.14.2-0.20211129172902-cf0de913ee8f h1:Y3Es3mIYatTvP4CXPXfmJtHWe8eq4E8owY6Fq61hEik=
 github.com/jackc/pgx/v4 v4.14.2-0.20211129172902-cf0de913ee8f/go.mod h1:RgDuE4Z34o7XE92RpLsvFiOEfrAUT0Xt2KxvX73W06M=
-github.com/jackc/pgx/v5 v5.0.0-20220305152325-2885b039d595 h1:IuM3PUEA1sZlV/9pjEMxs614tPVncAk8Fej8BV9r1K8=
-github.com/jackc/pgx/v5 v5.0.0-20220305152325-2885b039d595/go.mod h1:hpqr/HW4qanKY/8S2BFVFWYaOpch/IjnvAAt6YdntZQ=
 github.com/jackc/pgx/v5 v5.0.0-alpha.3.0.20220430132951-01190e5d78a4 h1:UGrIH8wpRSVq+3gBH1xAr9vYqrNsTTgmvVO5En1hf1k=
 github.com/jackc/pgx/v5 v5.0.0-alpha.3.0.20220430132951-01190e5d78a4/go.mod h1:9166s9MdYYheYgI0ySjd/tbPF4wbq4vjgVzkZSt2UDE=
 github.com/jackc/puddle v0.0.0-20190413234325-e4ced69a3a2b/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=
