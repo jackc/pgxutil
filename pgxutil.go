@@ -112,6 +112,20 @@ func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...any) ([]m
 	return v, nil
 }
 
+type mapRowScanner map[string]any
+
+func (rs *mapRowScanner) ScanRow(rows pgx.Rows) error {
+	values, err := rows.Values()
+	if err != nil {
+		return err
+	}
+	*rs = make(mapRowScanner, len(values))
+	for i := range values {
+		(*rs)[string(rows.FieldDescriptions()[i].Name)] = values[i]
+	}
+	return nil
+}
+
 // SelectStringMap selects a single row into a map where all values are strings. An error will be returned if no rows
 // are found.
 func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]string, error) {
