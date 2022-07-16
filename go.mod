@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/jackc/pgsql v0.0.0-20200214204435-ebb58a15ff4a
-	github.com/jackc/pgx/v5 v5.0.0-alpha.3.0.20220430174912-c1495aace02f
+	github.com/jackc/pgx/v5 v5.0.0-alpha.4.0.20220716172710-78875bb95ab2
 	github.com/stretchr/testify v1.7.0
 )
 
