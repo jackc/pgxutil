@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/jackc/pgsql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -285,26 +284,6 @@ func SelectAllStruct(ctx context.Context, db Queryer, dst any, sql string, args 
 	ptrSliceValue.Elem().Set(sliceValue)
 
 	return nil
-}
-
-// Insert inserts a row and returns the resulting row.
-func Insert(ctx context.Context, db Queryer, tableName string, values map[string]any) (map[string]any, error) {
-	stmt := pgsql.Insert(tableName).Data(pgsql.RowMap(values)).Returning("*")
-	sql, args := pgsql.Build(stmt)
-	return SelectMap(ctx, db, sql, args...)
-}
-
-// Update executes an update statement and returns the number of rows updated.
-func Update(ctx context.Context, db Execer, tableName string, setValues, whereArgs map[string]any) (int64, error) {
-	stmt := pgsql.Update(tableName).Set(pgsql.RowMap(setValues))
-	if whereArgs != nil {
-		for k, v := range whereArgs {
-			stmt.Where(fmt.Sprintf("%s = ?", k), v)
-		}
-	}
-	sql, args := pgsql.Build(stmt)
-	ct, err := db.Exec(ctx, sql, args...)
-	return ct.RowsAffected(), err
 }
 
 // SelectValue selects a single T. An error will be returned if no rows are found.
