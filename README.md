@@ -2,3 +2,9 @@
 ![Build Status](https://github.com/jackc/pgxutil/actions/workflows/ci.yml/badge.svg)
 
 # pgxutil
+
+pgxutil is a collection of utilities for working with [pgx](https://github.com/jackc/pgx).
+
+## Package Status
+
+The API may change at any time or the package may be abandoned.
