@@ -19,13 +19,13 @@ jobs:
           sudo -u postgres createuser -s runner
           createdb runner
 
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
       - name: Set up Go 1.x
         uses: actions/setup-go@v4
         with:
           go-version: 1.19
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
 
       # - name: Setup upterm session
       #   uses: lhotari/action-upterm@v1
