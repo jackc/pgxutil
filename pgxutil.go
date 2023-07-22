@@ -78,6 +78,8 @@ func selectRows(ctx context.Context, db Queryer, sql string, args []any, rowFn f
 }
 
 // SelectMap selects a single row into a map. An error will be returned if no rows are found.
+//
+// Deprecated: Prefer SelectRow with pgx.RowToMap.
 func SelectMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]any, error) {
 	var v map[string]any
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -91,6 +93,8 @@ func SelectMap(ctx context.Context, db Queryer, sql string, args ...any) (map[st
 }
 
 // SelectAllMap selects rows into a map slice.
+//
+// Deprecated: Prefer Select with pgx.RowToMap.
 func SelectAllMap(ctx context.Context, db Queryer, sql string, args ...any) ([]map[string]any, error) {
 	var v []map[string]any
 	err := selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -127,6 +131,8 @@ func (rs *mapRowScanner) ScanRow(rows pgx.Rows) error {
 
 // SelectStringMap selects a single row into a map where all values are strings. An error will be returned if no rows
 // are found.
+//
+// Deprecated: Prefer SelectRow.
 func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...any) (map[string]string, error) {
 	var v map[string]string
 	args = append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
@@ -146,6 +152,8 @@ func SelectStringMap(ctx context.Context, db Queryer, sql string, args ...any) (
 }
 
 // SelectAllStringMap selects rows into a map slice where all values are strings.
+//
+// Deprecated: Prefer Select.
 func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...any) ([]map[string]string, error) {
 	var v []map[string]string
 	args = append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
@@ -169,6 +177,8 @@ func SelectAllStringMap(ctx context.Context, db Queryer, sql string, args ...any
 
 // SelectStruct selects a single row into struct dst. An error will be returned if no rows are found. The values are
 // assigned positionally to the exported struct fields.
+//
+// Deprecated: Prefer SelectRow with pgx.RowToAddrOfStruct.
 func SelectStruct(ctx context.Context, db Queryer, dst any, sql string, args ...any) error {
 	dstValue := reflect.ValueOf(dst)
 	if dstValue.Kind() != reflect.Ptr {
@@ -208,6 +218,8 @@ func SelectStruct(ctx context.Context, db Queryer, dst any, sql string, args ...
 
 // SelectAllStruct selects rows into dst. dst must be a slice of struct or pointer to struct. The values are assigned
 // positionally to the exported struct fields.
+//
+// Deprecated: Prefer Select with pgx.RowToAddrOfStruct.
 func SelectAllStruct(ctx context.Context, db Queryer, dst any, sql string, args ...any) error {
 	ptrSliceValue := reflect.ValueOf(dst)
 	if ptrSliceValue.Kind() != reflect.Ptr {
@@ -287,6 +299,8 @@ func SelectAllStruct(ctx context.Context, db Queryer, dst any, sql string, args 
 }
 
 // SelectValue selects a single T. An error will be returned if no rows are found.
+//
+// Deprecated: Prefer SelectRow with pgx.RowTo.
 func SelectValue[T any](ctx context.Context, db Queryer, sql string, args ...any) (T, error) {
 	var v T
 	err := selectOneRow(ctx, db, sql, args, func(rows pgx.Rows) error {
@@ -311,6 +325,8 @@ func SelectValue[T any](ctx context.Context, db Queryer, sql string, args ...any
 }
 
 // SelectColumn selects a column of T.
+//
+// Deprecated: Prefer Select with pgx.RowTo.
 func SelectColumn[T any](ctx context.Context, db Queryer, sql string, args ...any) ([]T, error) {
 	column := []T{}
 
