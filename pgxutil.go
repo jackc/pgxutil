@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-var errNullValue = errors.New("value is null")
 var errNotFound = errors.New("no rows in result set")
 var errNoColumns = errors.New("no columns in result set")
 var errMultipleColumns = errors.New("multiple columns in result set")
@@ -22,21 +21,6 @@ type Queryer interface {
 
 type Execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-func selectColumn(ctx context.Context, db Queryer, sql string, args []any, rowFn func(pgx.Rows) error) error {
-	return selectRows(ctx, db, sql, args, func(rows pgx.Rows) error {
-		if len(rows.RawValues()) == 0 {
-			rows.Close()
-			return errNoColumns
-		}
-		if len(rows.RawValues()) > 1 {
-			rows.Close()
-			return errMultipleColumns
-		}
-
-		return rowFn(rows)
-	})
 }
 
 func selectOneRow(ctx context.Context, db Queryer, sql string, args []any, rowFn func(pgx.Rows) error) error {

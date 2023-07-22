@@ -342,33 +342,6 @@ func updateSQL(tableName pgx.Identifier, setValues, whereValues map[string]any, 
 	return b.String(), args
 }
 
-// queryRow builds QueryRow-like functionality on top of DB. This allows pgxutil to have the convenience of QueryRow
-// without needing it as part of the DB interface.
-func queryRow(ctx context.Context, db Queryer, sql string, args []any, scanTargets []any) error {
-	rows, err := db.Query(ctx, sql, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		rows.Scan(scanTargets...)
-	} else {
-		return pgx.ErrNoRows
-	}
-
-	if rows.Next() {
-		return errTooManyRows
-	}
-
-	err = rows.Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // exec builds Exec-like functionality on top of DB. This allows pgxutil to have the convenience of Exec with needing
 // it as part of the DB interface.
 func exec(ctx context.Context, db Queryer, sql string, args []any) (pgconn.CommandTag, error) {

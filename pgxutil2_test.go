@@ -460,6 +460,7 @@ func TestUpdate(t *testing.T) {
 		require.EqualValues(t, 1, ct.RowsAffected())
 
 		people, err := pgxutil.Select(ctx, conn, `select * from t where age = $1`, []any{70}, pgx.RowToAddrOfStructByPos[Person])
+		require.NoError(t, err)
 		require.Len(t, people, 1)
 		require.EqualValues(t, 1, people[0].ID)
 		require.Equal(t, "John", people[0].Name)
@@ -565,7 +566,7 @@ func TestUpdateRowReturning(t *testing.T) {
 		require.Equal(t, "John", person.Name)
 		require.EqualValues(t, 70, person.Age)
 
-		person, err = pgxutil.UpdateRowReturning(ctx, conn, pgx.Identifier{"t"}, map[string]any{"age": 70}, nil, "*", pgx.RowToAddrOfStructByPos[Person])
+		_, err = pgxutil.UpdateRowReturning(ctx, conn, pgx.Identifier{"t"}, map[string]any{"age": 70}, nil, "*", pgx.RowToAddrOfStructByPos[Person])
 		require.ErrorContains(t, err, "too many rows")
 	})
 }
