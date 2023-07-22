@@ -16,11 +16,18 @@ var errTooManyRows = fmt.Errorf("too many rows")
 
 // DB is the interface pgxutil uses to access the database. It is satisfied by *pgx.Conn, pgx.Tx, *pgxpool.Pool, etc.
 type DB interface {
+	// Begin starts a new pgx.Tx. It may be a true transaction or a pseudo nested transaction implemented by savepoints.
+	Begin(ctx context.Context) (pgx.Tx, error)
+
+	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	SendBatch(ctx context.Context, b *pgx.Batch) (br pgx.BatchResults)
 }
 
 // Select executes sql with args on db and returns the []T produced by scanFn.
-func Select[T any](ctx context.Context, db DB, sql string, args []any, scanFn pgx.RowToFunc[T]) ([]T, error) {
+func Select[T any](ctx context.Context, db Queryer, sql string, args []any, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	rows, _ := db.Query(ctx, sql, args...)
 	collectedRows, err := pgx.CollectRows(rows, scanFn)
 	if err != nil {
@@ -33,7 +40,7 @@ func Select[T any](ctx context.Context, db DB, sql string, args []any, scanFn pg
 // SelectRow executes sql with args on db and returns the T produced by scanFn. The query should return one row. If no
 // rows are found returns an error where errors.Is(pgx.ErrNoRows) is true. Returns an error if more than one row is
 // returned.
-func SelectRow[T any](ctx context.Context, db DB, sql string, args []any, scanFn pgx.RowToFunc[T]) (T, error) {
+func SelectRow[T any](ctx context.Context, db Queryer, sql string, args []any, scanFn pgx.RowToFunc[T]) (T, error) {
 	rows, _ := db.Query(ctx, sql, args...)
 	collectedRow, err := pgx.CollectOneRow(rows, scanFn)
 	if err != nil {
@@ -49,7 +56,7 @@ func SelectRow[T any](ctx context.Context, db DB, sql string, args []any, scanFn
 }
 
 // Insert inserts rows into tableName. tableName must be a string or pgx.Identifier.
-func Insert(ctx context.Context, db DB, tableName any, rows []map[string]any) (pgconn.CommandTag, error) {
+func Insert(ctx context.Context, db Queryer, tableName any, rows []map[string]any) (pgconn.CommandTag, error) {
 	if len(rows) == 0 {
 		return pgconn.CommandTag{}, nil
 	}
@@ -65,7 +72,7 @@ func Insert(ctx context.Context, db DB, tableName any, rows []map[string]any) (p
 
 // InsertReturning inserts rows into tableName with returningClause and returns the []T produced by scanFn. tableName
 // must be a string or pgx.Identifier.
-func InsertReturning[T any](ctx context.Context, db DB, tableName any, rows []map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
+func InsertReturning[T any](ctx context.Context, db Queryer, tableName any, rows []map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -136,7 +143,7 @@ func insertSQL(tableName pgx.Identifier, rows []map[string]any, returningClause 
 }
 
 // InsertRow inserts values into tableName. tableName must be a string or pgx.Identifier.
-func InsertRow(ctx context.Context, db DB, tableName any, values map[string]any) error {
+func InsertRow(ctx context.Context, db Queryer, tableName any, values map[string]any) error {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		return fmt.Errorf("InsertRow invalid tableName: %w", err)
@@ -149,7 +156,7 @@ func InsertRow(ctx context.Context, db DB, tableName any, values map[string]any)
 
 // InsertRowReturning inserts values into tableName with returningClause and returns the T produced by scanFn. tableName
 // must be a string or pgx.Identifier.
-func InsertRowReturning[T any](ctx context.Context, db DB, tableName any, values map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
+func InsertRowReturning[T any](ctx context.Context, db Queryer, tableName any, values map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		var zero T
@@ -211,7 +218,7 @@ func insertRowSQL(tableName pgx.Identifier, values map[string]any, returningClau
 }
 
 // ExecRow executes SQL with args on db. It returns an error unless exactly one row is affected.
-func ExecRow(ctx context.Context, db DB, sql string, args ...any) (pgconn.CommandTag, error) {
+func ExecRow(ctx context.Context, db Queryer, sql string, args ...any) (pgconn.CommandTag, error) {
 	ct, err := exec(ctx, db, sql, args)
 	if err != nil {
 		return ct, err
@@ -228,7 +235,7 @@ func ExecRow(ctx context.Context, db DB, sql string, args ...any) (pgconn.Comman
 
 // Update updates rows matching whereValues in tableName with setValues. It includes returningClause and returns the []T
 // produced by scanFn. tableName must be a string or pgx.Identifier.
-func Update(ctx context.Context, db DB, tableName any, setValues, whereValues map[string]any) (pgconn.CommandTag, error) {
+func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) (pgconn.CommandTag, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		return pgconn.CommandTag{}, fmt.Errorf("Update invalid tableName: %w", err)
@@ -240,7 +247,7 @@ func Update(ctx context.Context, db DB, tableName any, setValues, whereValues ma
 
 // UpdateReturning updates rows matching whereValues in tableName with setValues. It includes returningClause and returns the []T
 // produced by scanFn. tableName must be a string or pgx.Identifier.
-func UpdateReturning[T any](ctx context.Context, db DB, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
+func UpdateReturning[T any](ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		return nil, fmt.Errorf("UpdateReturning invalid tableName: %w", err)
@@ -252,7 +259,7 @@ func UpdateReturning[T any](ctx context.Context, db DB, tableName any, setValues
 
 // UpdateRow updates a row matching whereValues in tableName with setValues. Returns an error unless exactly one row is
 // updated. tableName must be a string or pgx.Identifier.
-func UpdateRow(ctx context.Context, db DB, tableName any, setValues, whereValues map[string]any) error {
+func UpdateRow(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) error {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		return fmt.Errorf("UpdateRow invalid tableName: %w", err)
@@ -265,7 +272,7 @@ func UpdateRow(ctx context.Context, db DB, tableName any, setValues, whereValues
 
 // UpdateRowReturning updates a row matching whereValues in tableName with setValues. It includes returningClause and returns the
 // T produced by scanFn. Returns an error unless exactly one row is updated. tableName must be a string or pgx.Identifier.
-func UpdateRowReturning[T any](ctx context.Context, db DB, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
+func UpdateRowReturning[T any](ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
 		var zero T
@@ -337,7 +344,7 @@ func updateSQL(tableName pgx.Identifier, setValues, whereValues map[string]any, 
 
 // queryRow builds QueryRow-like functionality on top of DB. This allows pgxutil to have the convenience of QueryRow
 // without needing it as part of the DB interface.
-func queryRow(ctx context.Context, db DB, sql string, args []any, scanTargets []any) error {
+func queryRow(ctx context.Context, db Queryer, sql string, args []any, scanTargets []any) error {
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
 		return err
@@ -364,7 +371,7 @@ func queryRow(ctx context.Context, db DB, sql string, args []any, scanTargets []
 
 // exec builds Exec-like functionality on top of DB. This allows pgxutil to have the convenience of Exec with needing
 // it as part of the DB interface.
-func exec(ctx context.Context, db DB, sql string, args []any) (pgconn.CommandTag, error) {
+func exec(ctx context.Context, db Queryer, sql string, args []any) (pgconn.CommandTag, error) {
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
 		return pgconn.CommandTag{}, err
