@@ -266,6 +266,13 @@ func TestInsertSQL(t *testing.T) {
 			sql:       `insert into "people" ("Complete Name", "sex") values ($1, $2) returning *`,
 			args:      []any{"Adam", "male"},
 		},
+		{
+			testName:  "SQLValue",
+			tableName: pgx.Identifier{"people"},
+			rows:      []map[string]any{{"name": "Adam", "sex": "male", "updated_at": pgxutil.SQLValue("now()")}},
+			sql:       `insert into "people" ("name", "sex", "updated_at") values ($1, $2, now()) returning *`,
+			args:      []any{"Adam", "male"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -374,6 +381,13 @@ func TestInsertRowSQL(t *testing.T) {
 			sql:       `insert into "people" ("Complete Name", "sex") values ($1, $2) returning *`,
 			args:      []any{"Adam", "male"},
 		},
+		{
+			testName:  "SQLValue",
+			tableName: pgx.Identifier{"people"},
+			values:    map[string]any{"name": "Adam", "sex": "male", "updated_at": pgxutil.SQLValue("now()")},
+			sql:       `insert into "people" ("name", "sex", "updated_at") values ($1, $2, now()) returning *`,
+			args:      []any{"Adam", "male"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -470,6 +484,22 @@ func TestUpdateSQL(t *testing.T) {
 			setValues:   map[string]any{"color": "green"},
 			whereValues: map[string]any{"color": "red"},
 			sql:         `update "products" set "color" = $1 where "color" = $2 returning *`,
+			args:        []any{"green", "red"},
+		},
+		{
+			testName:    "Set with SQLValue",
+			tableName:   pgx.Identifier{"products"},
+			setValues:   map[string]any{"color": "green", "updated_at": pgxutil.SQLValue("now()")},
+			whereValues: map[string]any{"color": "red"},
+			sql:         `update "products" set "color" = $1, "updated_at" = now() where "color" = $2 returning *`,
+			args:        []any{"green", "red"},
+		},
+		{
+			testName:    "Where with SQLValue",
+			tableName:   pgx.Identifier{"products"},
+			setValues:   map[string]any{"color": "green"},
+			whereValues: map[string]any{"color": "red", "updated_at": pgxutil.SQLValue("now()")},
+			sql:         `update "products" set "color" = $1 where "color" = $2 and "updated_at" = now() returning *`,
 			args:        []any{"green", "red"},
 		},
 	}

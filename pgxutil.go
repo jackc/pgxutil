@@ -39,6 +39,9 @@ type DB interface {
 	SendBatch(ctx context.Context, b *pgx.Batch) (br pgx.BatchResults)
 }
 
+// SQLValue is a SQL expression intended for use where a value would normally be expected. It is not escaped or sanitized.
+type SQLValue string
+
 // Select executes sql with args on db and returns the []T produced by scanFn.
 func Select[T any](ctx context.Context, db Queryer, sql string, args []any, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	rows, _ := db.Query(ctx, sql, args...)
@@ -68,7 +71,8 @@ func SelectRow[T any](ctx context.Context, db Queryer, sql string, args []any, s
 	return collectedRow, nil
 }
 
-// Insert inserts rows into tableName. tableName must be a string or pgx.Identifier.
+// Insert inserts rows into tableName. tableName must be a string or pgx.Identifier. rows can include SQLValue to use a
+// raw SQL expression as a value.
 func Insert(ctx context.Context, db Queryer, tableName any, rows []map[string]any) (pgconn.CommandTag, error) {
 	if len(rows) == 0 {
 		return pgconn.CommandTag{}, nil
@@ -84,7 +88,7 @@ func Insert(ctx context.Context, db Queryer, tableName any, rows []map[string]an
 }
 
 // InsertReturning inserts rows into tableName with returningClause and returns the []T produced by scanFn. tableName
-// must be a string or pgx.Identifier.
+// must be a string or pgx.Identifier. rows can include SQLValue to use a raw SQL expression as a value.
 func InsertReturning[T any](ctx context.Context, db Queryer, tableName any, rows []map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	if len(rows) == 0 {
 		return nil, nil
@@ -126,7 +130,6 @@ func insertSQL(tableName pgx.Identifier, rows []map[string]any, returningClause 
 	}
 
 	args = make([]any, 0, len(keys))
-	placeholder := int64(1)
 	for i, values := range rows {
 		if i == 0 {
 			b.WriteString(") values (")
@@ -138,10 +141,13 @@ func insertSQL(tableName pgx.Identifier, rows []map[string]any, returningClause 
 			if j > 0 {
 				b.WriteString(", ")
 			}
-			args = append(args, values[key])
-			b.WriteByte('$')
-			b.WriteString(strconv.FormatInt(placeholder, 10))
-			placeholder++
+			if SQLValue, ok := values[key].(SQLValue); ok {
+				b.WriteString(string(SQLValue))
+			} else {
+				args = append(args, values[key])
+				b.WriteByte('$')
+				b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+			}
 		}
 	}
 
@@ -155,7 +161,8 @@ func insertSQL(tableName pgx.Identifier, rows []map[string]any, returningClause 
 	return b.String(), args
 }
 
-// InsertRow inserts values into tableName. tableName must be a string or pgx.Identifier.
+// InsertRow inserts values into tableName. tableName must be a string or pgx.Identifier. values can include SQLValue to
+// use a raw SQL expression as a value.
 func InsertRow(ctx context.Context, db Queryer, tableName any, values map[string]any) error {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -168,7 +175,7 @@ func InsertRow(ctx context.Context, db Queryer, tableName any, values map[string
 }
 
 // InsertRowReturning inserts values into tableName with returningClause and returns the T produced by scanFn. tableName
-// must be a string or pgx.Identifier.
+// must be a string or pgx.Identifier. values can include SQLValue to use a raw SQL expression as a value.
 func InsertRowReturning[T any](ctx context.Context, db Queryer, tableName any, values map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -210,14 +217,18 @@ func insertRowSQL(tableName pgx.Identifier, values map[string]any, returningClau
 	}
 
 	b.WriteString(") values (")
-	args = make([]any, len(keys))
-	for i, k := range keys {
-		if i > 0 {
+	args = make([]any, 0, len(keys))
+	for _, k := range keys {
+		if len(args) > 0 {
 			b.WriteString(", ")
 		}
-		args[i] = values[k]
-		b.WriteByte('$')
-		b.WriteString(strconv.FormatInt(int64(i+1), 10))
+		if SQLValue, ok := values[k].(SQLValue); ok {
+			b.WriteString(string(SQLValue))
+		} else {
+			args = append(args, values[k])
+			b.WriteByte('$')
+			b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+		}
 	}
 
 	b.WriteString(")")
@@ -247,7 +258,8 @@ func ExecRow(ctx context.Context, db Queryer, sql string, args ...any) (pgconn.C
 }
 
 // Update updates rows matching whereValues in tableName with setValues. It includes returningClause and returns the []T
-// produced by scanFn. tableName must be a string or pgx.Identifier.
+// produced by scanFn. tableName must be a string or pgx.Identifier. setValues and whereValues can include SQLValue to
+// use a raw SQL expression as a value.
 func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) (pgconn.CommandTag, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -258,8 +270,9 @@ func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValu
 	return exec(ctx, db, sql, args)
 }
 
-// UpdateReturning updates rows matching whereValues in tableName with setValues. It includes returningClause and returns the []T
-// produced by scanFn. tableName must be a string or pgx.Identifier.
+// UpdateReturning updates rows matching whereValues in tableName with setValues. It includes returningClause and
+// returns the []T produced by scanFn. tableName must be a string or pgx.Identifier. setValues and whereValues can
+// include SQLValue to use a raw SQL expression as a value.
 func UpdateReturning[T any](ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -271,7 +284,8 @@ func UpdateReturning[T any](ctx context.Context, db Queryer, tableName any, setV
 }
 
 // UpdateRow updates a row matching whereValues in tableName with setValues. Returns an error unless exactly one row is
-// updated. tableName must be a string or pgx.Identifier.
+// updated. tableName must be a string or pgx.Identifier. setValues and whereValues can include SQLValue to use a raw
+// SQL expression as a value.
 func UpdateRow(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) error {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -283,8 +297,9 @@ func UpdateRow(ctx context.Context, db Queryer, tableName any, setValues, whereV
 	return err
 }
 
-// UpdateRowReturning updates a row matching whereValues in tableName with setValues. It includes returningClause and returns the
-// T produced by scanFn. Returns an error unless exactly one row is updated. tableName must be a string or pgx.Identifier.
+// UpdateRowReturning updates a row matching whereValues in tableName with setValues. It includes returningClause and
+// returns the T produced by scanFn. Returns an error unless exactly one row is updated. tableName must be a string or
+// pgx.Identifier. setValues and whereValues can include SQLValue to use a raw SQL expression as a value.
 func UpdateRowReturning[T any](ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) (T, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -321,9 +336,15 @@ func updateSQL(tableName pgx.Identifier, setValues, whereValues map[string]any, 
 		}
 		sanitizedKey := sanitizeIdentifier(k)
 		b.WriteString(sanitizedKey)
-		b.WriteString(" = $")
-		args = append(args, setValues[k])
-		b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+
+		if SQLValue, ok := setValues[k].(SQLValue); ok {
+			b.WriteString(" = ")
+			b.WriteString(string(SQLValue))
+		} else {
+			b.WriteString(" = $")
+			args = append(args, setValues[k])
+			b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+		}
 	}
 
 	if len(whereValues) > 0 {
@@ -341,9 +362,15 @@ func updateSQL(tableName pgx.Identifier, setValues, whereValues map[string]any, 
 			}
 			sanitizedKey := sanitizeIdentifier(k)
 			b.WriteString(sanitizedKey)
-			b.WriteString(" = $")
-			args = append(args, whereValues[k])
-			b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+
+			if SQLValue, ok := whereValues[k].(SQLValue); ok {
+				b.WriteString(" = ")
+				b.WriteString(string(SQLValue))
+			} else {
+				b.WriteString(" = $")
+				args = append(args, whereValues[k])
+				b.WriteString(strconv.FormatInt(int64(len(args)), 10))
+			}
 		}
 	}
 
