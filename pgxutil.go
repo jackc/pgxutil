@@ -53,6 +53,19 @@ func Select[T any](ctx context.Context, db Queryer, sql string, args []any, scan
 	return collectedRows, nil
 }
 
+// QueueSelect queues sql with args into batch. scanFn will be used to populate result when the response to this query
+// is received.
+func QueueSelect[T any](batch *pgx.Batch, sql string, args []any, scanFn pgx.RowToFunc[T], result *[]T) {
+	batch.Queue(sql, args...).Query(func(rows pgx.Rows) error {
+		collectedRows, err := pgx.CollectRows(rows, scanFn)
+		if err != nil {
+			return err
+		}
+		*result = collectedRows
+		return nil
+	})
+}
+
 // SelectRow executes sql with args on db and returns the T produced by scanFn. The query should return one row. If no
 // rows are found returns an error where errors.Is(pgx.ErrNoRows) is true. Returns an error if more than one row is
 // returned.

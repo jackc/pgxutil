@@ -118,6 +118,59 @@ func TestSelectNoRows(t *testing.T) {
 	})
 }
 
+func TestQueueSelect(t *testing.T) {
+	t.Parallel()
+
+	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
+		type Person struct {
+			ID   int32
+			Name string
+			Age  int32
+		}
+
+		batch := &pgx.Batch{}
+
+		var people []*Person
+		pgxutil.QueueSelect(batch, `select n, 'John', 42 from generate_series(1,3) n`, nil, pgx.RowToAddrOfStructByPos[Person], &people)
+		require.Nil(t, people)
+
+		err := conn.SendBatch(ctx, batch).Close()
+		require.NoError(t, err)
+		require.Len(t, people, 3)
+		require.EqualValues(t, 1, people[0].ID)
+		require.Equal(t, "John", people[0].Name)
+		require.EqualValues(t, 42, people[0].Age)
+		require.EqualValues(t, 2, people[1].ID)
+		require.Equal(t, "John", people[1].Name)
+		require.EqualValues(t, 42, people[1].Age)
+		require.EqualValues(t, 3, people[2].ID)
+		require.Equal(t, "John", people[2].Name)
+		require.EqualValues(t, 42, people[2].Age)
+	})
+}
+
+func TestQueueSelectNoRows(t *testing.T) {
+	t.Parallel()
+
+	defaultConnTestRunner.RunTest(context.Background(), t, func(ctx context.Context, t testing.TB, conn *pgx.Conn) {
+		type Person struct {
+			ID   int32
+			Name string
+			Age  int32
+		}
+
+		batch := &pgx.Batch{}
+
+		var people []*Person
+		pgxutil.QueueSelect(batch, `select 1, 'John', 42 where false`, nil, pgx.RowToAddrOfStructByPos[Person], &people)
+		require.Nil(t, people)
+
+		err := conn.SendBatch(ctx, batch).Close()
+		require.NoError(t, err)
+		require.Len(t, people, 0)
+	})
+}
+
 func TestSelectRow(t *testing.T) {
 	t.Parallel()
 
