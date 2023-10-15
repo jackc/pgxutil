@@ -404,6 +404,21 @@ func UpdateReturning[T any](ctx context.Context, db Queryer, tableName any, setV
 	return Select(ctx, db, sql, args, scanFn)
 }
 
+// QueueUpdateReturning queues the update of rows matching whereValues in tableName with setValues. tableName must be a
+// string or pgx.Identifier. setValues and whereValues can include SQLValue to use a raw SQL expression as a value.
+// scanFn will be used to populate the result when the response to this query is received.
+func QueueUpdateReturning[T any](batch *pgx.Batch, tableName any, setValues, whereValues map[string]any, returningClause string, scanFn pgx.RowToFunc[T], result *[]T) {
+	tableIdent, err := makePgxIdentifier(tableName)
+	if err != nil {
+		// Panicking is undesirable, but we don't want to have this function return an error or silently ignore the error.
+		// Possibly pgx.Batch should be modified to allow queueing an error.
+		panic(fmt.Sprintf("QueueUpdateReturning invalid tableName: %v", err))
+	}
+
+	sql, args := updateSQL(tableIdent, setValues, whereValues, returningClause)
+	QueueSelect(batch, sql, args, scanFn, result)
+}
+
 // UpdateRow updates a row matching whereValues in tableName with setValues. Returns an error unless exactly one row is
 // updated. tableName must be a string or pgx.Identifier. setValues and whereValues can include SQLValue to use a raw
 // SQL expression as a value.
