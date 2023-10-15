@@ -358,9 +358,8 @@ func ExecRow(ctx context.Context, db Queryer, sql string, args ...any) (pgconn.C
 	return ct, nil
 }
 
-// Update updates rows matching whereValues in tableName with setValues. It includes returningClause and returns the []T
-// produced by scanFn. tableName must be a string or pgx.Identifier. setValues and whereValues can include SQLValue to
-// use a raw SQL expression as a value.
+// Update updates rows matching whereValues in tableName with setValues. tableName must be a string or pgx.Identifier.
+// setValues and whereValues can include SQLValue to use a raw SQL expression as a value.
 func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) (pgconn.CommandTag, error) {
 	tableIdent, err := makePgxIdentifier(tableName)
 	if err != nil {
@@ -369,6 +368,27 @@ func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValu
 
 	sql, args := updateSQL(tableIdent, setValues, whereValues, "")
 	return exec(ctx, db, sql, args)
+}
+
+// QueueUpdate queues the update of rows matching whereValues in tableName with setValues. tableName must be a string or
+// pgx.Identifier. setValues and whereValues can include SQLValue to use a raw SQL expression as a value. commandTag
+// will be populated when the response to this query is received. commandTag may be nil.
+func QueueUpdate(batch *pgx.Batch, tableName any, setValues, whereValues map[string]any, commandTag *pgconn.CommandTag) {
+	tableIdent, err := makePgxIdentifier(tableName)
+	if err != nil {
+		// Panicking is undesirable, but we don't want to have this function return an error or silently ignore the error.
+		// Possibly pgx.Batch should be modified to allow queueing an error.
+		panic(fmt.Sprintf("QueueUpdate invalid tableName: %v", err))
+	}
+
+	sql, args := updateSQL(tableIdent, setValues, whereValues, "")
+	qq := batch.Queue(sql, args...)
+	if commandTag != nil {
+		qq.Exec(func(ct pgconn.CommandTag) error {
+			*commandTag = ct
+			return nil
+		})
+	}
 }
 
 // UpdateReturning updates rows matching whereValues in tableName with setValues. It includes returningClause and
