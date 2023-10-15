@@ -446,6 +446,21 @@ func UpdateRow(ctx context.Context, db Queryer, tableName any, setValues, whereV
 	return err
 }
 
+// QueueUpdateRow queues the update of a row matching whereValues in tableName with setValues. Returns an error unless
+// exactly one row is updated. tableName must be a string or pgx.Identifier. setValues and whereValues can include
+// SQLValue to use a raw SQL expression as a value.
+func QueueUpdateRow(batch *pgx.Batch, tableName any, setValues, whereValues map[string]any) {
+	tableIdent, err := makePgxIdentifier(tableName)
+	if err != nil {
+		// Panicking is undesirable, but we don't want to have this function return an error or silently ignore the error.
+		// Possibly pgx.Batch should be modified to allow queueing an error.
+		panic(fmt.Sprintf("QueueUpdateRow invalid tableName: %v", err))
+	}
+
+	sql, args := updateSQL(tableIdent, setValues, whereValues, "")
+	QueueExecRow(batch, sql, args...)
+}
+
 // UpdateRowReturning updates a row matching whereValues in tableName with setValues. It includes returningClause and
 // returns the T produced by scanFn. Returns an error unless exactly one row is updated. tableName must be a string or
 // pgx.Identifier. setValues and whereValues can include SQLValue to use a raw SQL expression as a value.
