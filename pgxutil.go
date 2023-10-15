@@ -358,6 +358,19 @@ func ExecRow(ctx context.Context, db Queryer, sql string, args ...any) (pgconn.C
 	return ct, nil
 }
 
+// QueueExecRow queues sql with args. The response is considered an error unless exactly one row is affected.
+func QueueExecRow(batch *pgx.Batch, sql string, args ...any) {
+	batch.Queue(sql, args...).Exec(func(ct pgconn.CommandTag) error {
+		rowsAffected := ct.RowsAffected()
+		if rowsAffected == 0 {
+			return pgx.ErrNoRows
+		} else if rowsAffected > 1 {
+			return errTooManyRows
+		}
+		return nil
+	})
+}
+
 // Update updates rows matching whereValues in tableName with setValues. tableName must be a string or pgx.Identifier.
 // setValues and whereValues can include SQLValue to use a raw SQL expression as a value.
 func Update(ctx context.Context, db Queryer, tableName any, setValues, whereValues map[string]any) (pgconn.CommandTag, error) {
