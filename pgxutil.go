@@ -84,6 +84,24 @@ func SelectRow[T any](ctx context.Context, db Queryer, sql string, args []any, s
 	return collectedRow, nil
 }
 
+// QueueSelectRow queues sql with args into batch. scanFn will be used to populate result when the response to this query
+// is received.
+func QueueSelectRow[T any](batch *pgx.Batch, sql string, args []any, scanFn pgx.RowToFunc[T], result *T) {
+	batch.Queue(sql, args...).Query(func(rows pgx.Rows) error {
+		collectedRow, err := pgx.CollectOneRow(rows, scanFn)
+		if err != nil {
+			return err
+		}
+
+		if rows.CommandTag().RowsAffected() > 1 {
+			return errTooManyRows
+		}
+
+		*result = collectedRow
+		return nil
+	})
+}
+
 // Insert inserts rows into tableName. tableName must be a string or pgx.Identifier. rows can include SQLValue to use a
 // raw SQL expression as a value.
 func Insert(ctx context.Context, db Queryer, tableName any, rows []map[string]any) (pgconn.CommandTag, error) {
