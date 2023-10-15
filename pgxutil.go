@@ -118,6 +118,26 @@ func Insert(ctx context.Context, db Queryer, tableName any, rows []map[string]an
 	return exec(ctx, db, sql, args)
 }
 
+// QueueInsert queues the insert of rows into tableName. tableName must be a string or pgx.Identifier. rows can include SQLValue to use a
+// raw SQL expression as a value.
+func QueueInsert(batch *pgx.Batch, tableName any, rows []map[string]any) {
+	if len(rows) == 0 {
+		// Since nothing is queued, the number of queries in the batch may be lower than expected. Not sure if anything can
+		// or should be done about this.
+		return
+	}
+
+	tableIdent, err := makePgxIdentifier(tableName)
+	if err != nil {
+		// Panicking is undesirable, but we don't want to have this function return an error or silently ignore the error.
+		// Possibly pgx.Batch should be modified to allow queueing an error.
+		panic(fmt.Sprintf("QueueInsert invalid tableName: %v", err))
+	}
+
+	sql, args := insertSQL(tableIdent, rows, "")
+	batch.Queue(sql, args...)
+}
+
 // InsertReturning inserts rows into tableName with returningClause and returns the []T produced by scanFn. tableName
 // must be a string or pgx.Identifier. rows can include SQLValue to use a raw SQL expression as a value.
 func InsertReturning[T any](ctx context.Context, db Queryer, tableName any, rows []map[string]any, returningClause string, scanFn pgx.RowToFunc[T]) ([]T, error) {
